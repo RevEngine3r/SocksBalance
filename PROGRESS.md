@@ -29,15 +29,25 @@
   - Wrote comprehensive unit tests for Backend and Pool
   - Tests: 18 test cases covering thread safety, filtering, and sorting
 
+- ✅ **STEP4: TCP Proxy Server** (2026-01-28)
+  - Created `internal/proxy/server.go` with TCP listener
+  - Implemented graceful shutdown with context cancellation
+  - Accept incoming connections in goroutines
+  - Basic TCP relay between client and backend (bidirectional)
+  - Added connection routing to healthy backends
+  - Integrated with main.go with signal handling (SIGINT, SIGTERM)
+  - Wrote comprehensive unit tests including mock backend server
+  - Tests: 7 test cases covering server lifecycle, connections, and graceful shutdown
+
 ## Current Step
-**STEP4: TCP Proxy Server** ([details](./ROAD_MAP/core-infrastructure/STEP4_tcp_proxy_server.md))
+**STEP5: Connection Handler** ([details](./ROAD_MAP/core-infrastructure/STEP5_connection_handler.md))
 
 ### Plan
-1. Create `internal/proxy/server.go` with TCP listener
-2. Implement graceful shutdown with signal handling
-3. Accept incoming SOCKS5 client connections
-4. Pass connections to handler (placeholder for now)
-5. Write unit tests for server lifecycle
+1. Implement SOCKS5 protocol parsing
+2. Handle authentication (no-auth method for now)
+3. Parse CONNECT requests
+4. Route to backend via load balancer
+5. Write unit tests for SOCKS5 protocol handling
 
 ### Status
 ⏳ Ready to implement
@@ -45,7 +55,7 @@
 ---
 
 ## Next Steps
-- STEP4: TCP Proxy Server
-- STEP5: Connection Handler
+- STEP5: Connection Handler (SOCKS5 Protocol)
 - STEP6: Health Checker
 - STEP7: Load Balancer
+- STEP8: Integration & Polish
