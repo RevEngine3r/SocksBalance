@@ -54,6 +54,20 @@ balancer:
   # Algorithm: roundrobin (only option currently)
   # Backends are automatically sorted by latency
   algorithm: "roundrobin"
+  
+  # Maximum latency threshold (IMPORTANT for stability!)
+  # Only backends with latency <= this value will be used
+  # Set to 0 to disable (use all healthy backends)
+  # Recommended: 500ms-2000ms depending on your needs
+  # Example: 1000ms = only use backends faster than 1 second
+  max_latency: 1000ms
+  
+  # Sticky session TTL (CRITICAL for multi-request apps like Twitter!)
+  # Keeps the same client IP connected to the same backend
+  # This prevents connection switching mid-session
+  # Set to 0 to disable sticky sessions
+  # Recommended: 5m-30m for web browsing
+  sticky_session_ttl: 10m
 
 # Logging configuration
 log:
