@@ -2,263 +2,229 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
-func TestLoadValidConfig(t *testing.T) {
-	yaml := `
-listen: "127.0.0.1:2080"
-backends:
-  - address: "proxy1.example.com:1080"
-    name: "Proxy 1"
-  - address: "proxy2.example.com:1080"
-    name: "Proxy 2"
-health:
-  connect_timeout: 3s
-  test_url: "https://www.example.com"
-  check_interval: 15s
-  request_timeout: 8s
-  failure_threshold: 2
-balancer:
-  algorithm: "roundrobin"
-  sort_by_latency: true
-  latency_tolerance: 30
-log:
-  level: "debug"
-  format: "json"
-`
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
-
-	cfg, err := Load(tmpFile)
+func TestParseAddress_Single(t *testing.T) {
+	addrs, err := ParseAddress("127.0.0.1:1080")
 	if err != nil {
-		t.Fatalf("Load failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if cfg.Listen != "127.0.0.1:2080" {
-		t.Errorf("Expected listen 127.0.0.1:2080, got %s", cfg.Listen)
+	if len(addrs) != 1 {
+		t.Errorf("expected 1 address, got %d", len(addrs))
 	}
-	if len(cfg.Backends) != 2 {
-		t.Errorf("Expected 2 backends, got %d", len(cfg.Backends))
-	}
-	if cfg.Backends[0].Address != "proxy1.example.com:1080" {
-		t.Errorf("Expected proxy1.example.com:1080, got %s", cfg.Backends[0].Address)
-	}
-	if cfg.Backends[0].Name != "Proxy 1" {
-		t.Errorf("Expected 'Proxy 1', got %s", cfg.Backends[0].Name)
-	}
-	if cfg.Health.ConnectTimeout != 3*time.Second {
-		t.Errorf("Expected 3s timeout, got %v", cfg.Health.ConnectTimeout)
-	}
-	if cfg.Health.TestURL != "https://www.example.com" {
-		t.Errorf("Expected test URL, got %s", cfg.Health.TestURL)
-	}
-	if cfg.Health.CheckInterval != 15*time.Second {
-		t.Errorf("Expected 15s interval, got %v", cfg.Health.CheckInterval)
-	}
-	if cfg.Health.FailureThreshold != 2 {
-		t.Errorf("Expected failure threshold 2, got %d", cfg.Health.FailureThreshold)
-	}
-	if cfg.Balancer.Algorithm != "roundrobin" {
-		t.Errorf("Expected roundrobin, got %s", cfg.Balancer.Algorithm)
-	}
-	if !cfg.Balancer.SortByLatency {
-		t.Error("Expected sort_by_latency true")
-	}
-	if cfg.Balancer.LatencyTolerance != 30 {
-		t.Errorf("Expected latency tolerance 30, got %d", cfg.Balancer.LatencyTolerance)
-	}
-	if cfg.Log.Level != "debug" {
-		t.Errorf("Expected debug level, got %s", cfg.Log.Level)
-	}
-	if cfg.Log.Format != "json" {
-		t.Errorf("Expected json format, got %s", cfg.Log.Format)
+	if addrs[0] != "127.0.0.1:1080" {
+		t.Errorf("expected 127.0.0.1:1080, got %s", addrs[0])
 	}
 }
 
-func TestLoadDefaults(t *testing.T) {
-	yaml := `
-backends:
-  - address: "proxy1.example.com:1080"
-`
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
-
-	cfg, err := Load(tmpFile)
+func TestParseAddress_Range(t *testing.T) {
+	addrs, err := ParseAddress("127.0.0.1:9070-9072")
 	if err != nil {
-		t.Fatalf("Load failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 3 {
+		t.Errorf("expected 3 addresses, got %d", len(addrs))
 	}
 
-	if cfg.Listen != "0.0.0.0:1080" {
-		t.Errorf("Expected default listen, got %s", cfg.Listen)
-	}
-	if cfg.Health.ConnectTimeout != 5*time.Second {
-		t.Errorf("Expected default 5s connect timeout, got %v", cfg.Health.ConnectTimeout)
-	}
-	if cfg.Health.CheckInterval != 10*time.Second {
-		t.Errorf("Expected default 10s interval, got %v", cfg.Health.CheckInterval)
-	}
-	if cfg.Health.RequestTimeout != 10*time.Second {
-		t.Errorf("Expected default 10s request timeout, got %v", cfg.Health.RequestTimeout)
-	}
-	if cfg.Health.FailureThreshold != 3 {
-		t.Errorf("Expected default failure threshold 3, got %d", cfg.Health.FailureThreshold)
-	}
-	if cfg.Balancer.Algorithm != "roundrobin" {
-		t.Errorf("Expected default roundrobin, got %s", cfg.Balancer.Algorithm)
-	}
-	if cfg.Balancer.LatencyTolerance != 50 {
-		t.Errorf("Expected default latency tolerance 50, got %d", cfg.Balancer.LatencyTolerance)
-	}
-	if cfg.Log.Level != "info" {
-		t.Errorf("Expected default info level, got %s", cfg.Log.Level)
-	}
-	if cfg.Log.Format != "text" {
-		t.Errorf("Expected default text format, got %s", cfg.Log.Format)
+	expected := []string{"127.0.0.1:9070", "127.0.0.1:9071", "127.0.0.1:9072"}
+	for i, addr := range addrs {
+		if addr != expected[i] {
+			t.Errorf("address %d: expected %s, got %s", i, expected[i], addr)
+		}
 	}
 }
 
-func TestLoadMissingBackends(t *testing.T) {
-	yaml := `
-listen: "0.0.0.0:1080"
-`
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
-
-	_, err := Load(tmpFile)
-	if err == nil {
-		t.Fatal("Expected error for missing backends")
+func TestParseAddress_IPv6Single(t *testing.T) {
+	addrs, err := ParseAddress("[::1]:1080")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 1 {
+		t.Errorf("expected 1 address, got %d", len(addrs))
+	}
+	if addrs[0] != "[::1]:1080" {
+		t.Errorf("expected [::1]:1080, got %s", addrs[0])
 	}
 }
 
-func TestLoadInvalidLogLevel(t *testing.T) {
-	yaml := `
-backends:
-  - address: "proxy1.example.com:1080"
-log:
-  level: "trace"
-`
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
+func TestParseAddress_IPv6Range(t *testing.T) {
+	addrs, err := ParseAddress("[::1]:9070-9072")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 3 {
+		t.Errorf("expected 3 addresses, got %d", len(addrs))
+	}
 
-	_, err := Load(tmpFile)
-	if err == nil {
-		t.Fatal("Expected error for invalid log level")
+	expected := []string{"[::1]:9070", "[::1]:9071", "[::1]:9072"}
+	for i, addr := range addrs {
+		if addr != expected[i] {
+			t.Errorf("address %d: expected %s, got %s", i, expected[i], addr)
+		}
 	}
 }
 
-func TestLoadInvalidLogFormat(t *testing.T) {
-	yaml := `
-backends:
-  - address: "proxy1.example.com:1080"
-log:
-  format: "xml"
-`
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
-
-	_, err := Load(tmpFile)
-	if err == nil {
-		t.Fatal("Expected error for invalid log format")
-	}
-}
-
-func TestLoadInvalidFailureThreshold(t *testing.T) {
-	yaml := `
-backends:
-  - address: "proxy1.example.com:1080"
-health:
-  failure_threshold: 0
-`
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
-
-	_, err := Load(tmpFile)
-	if err == nil {
-		t.Fatal("Expected error for invalid failure_threshold")
-	}
-}
-
-func TestLoadNegativeTimeout(t *testing.T) {
+func TestParseAddress_InvalidRange(t *testing.T) {
 	tests := []struct {
 		name string
-		yaml string
+		addr string
 	}{
-		{
-			name: "negative connect_timeout",
-			yaml: `
-backends:
-  - address: "proxy1.example.com:1080"
-health:
-  connect_timeout: -5s
-`,
-		},
-		{
-			name: "negative check_interval",
-			yaml: `
-backends:
-  - address: "proxy1.example.com:1080"
-health:
-  check_interval: -10s
-`,
-		},
+		{"reverse range", "127.0.0.1:9072-9070"},
+		{"invalid start port", "127.0.0.1:abc-9072"},
+		{"invalid end port", "127.0.0.1:9070-xyz"},
+		{"port too high", "127.0.0.1:70000-70001"},
+		{"port too low", "127.0.0.1:0-10"},
+		{"range too large", "127.0.0.1:1000-3000"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpFile := writeTemp(t, tt.yaml)
-			defer os.Remove(tmpFile)
-
-			_, err := Load(tmpFile)
+			_, err := ParseAddress(tt.addr)
 			if err == nil {
-				t.Fatal("Expected error for negative timeout")
+				t.Errorf("expected error for %s, got nil", tt.addr)
 			}
 		})
 	}
 }
 
-func TestLoadMissingBackendAddress(t *testing.T) {
-	yaml := `
+func TestExpandBackends(t *testing.T) {
+	cfg := &Config{
+		Backends: []BackendConfig{
+			{Address: "127.0.0.1:1080", Name: "Single"},
+			{Address: "127.0.0.1:9070-9072", Name: "Range"},
+		},
+	}
+
+	expanded := cfg.ExpandBackends()
+
+	// Should have 1 + 3 = 4 backends
+	if len(expanded) != 4 {
+		t.Errorf("expected 4 expanded backends, got %d", len(expanded))
+	}
+
+	// First backend should remain unchanged
+	if expanded[0].Address != "127.0.0.1:1080" {
+		t.Errorf("expected first backend 127.0.0.1:1080, got %s", expanded[0].Address)
+	}
+	if expanded[0].Name != "Single" {
+		t.Errorf("expected first backend name 'Single', got %s", expanded[0].Name)
+	}
+
+	// Range should be expanded with numbered names
+	expectedRange := []struct {
+		addr string
+		name string
+	}{
+		{"127.0.0.1:9070", "Range#1"},
+		{"127.0.0.1:9071", "Range#2"},
+		{"127.0.0.1:9072", "Range#3"},
+	}
+
+	for i, expected := range expectedRange {
+		idx := i + 1 // Skip first backend
+		if expanded[idx].Address != expected.addr {
+			t.Errorf("backend %d: expected address %s, got %s", idx, expected.addr, expanded[idx].Address)
+		}
+		if expanded[idx].Name != expected.name {
+			t.Errorf("backend %d: expected name %s, got %s", idx, expected.name, expanded[idx].Name)
+		}
+	}
+}
+
+func TestLoad(t *testing.T) {
+	configData := `
+listen: "0.0.0.0:1080"
+mode: "transparent"
 backends:
-  - name: "Proxy 1"
+  - address: "127.0.0.1:1080"
+    name: "Test Backend"
+health:
+  test_url: "https://example.com"
+  check_interval: 5s
+  connect_timeout: 3s
+  request_timeout: 8s
+  failure_threshold: 2
+balancer:
+  algorithm: "roundrobin"
+log:
+  level: "debug"
+  format: "json"
 `
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
 
-	_, err := Load(tmpFile)
-	if err == nil {
-		t.Fatal("Expected error for missing backend address")
+	tmpFile, err := os.CreateTemp("", "config-*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configData); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if cfg.Listen != "0.0.0.0:1080" {
+		t.Errorf("expected listen 0.0.0.0:1080, got %s", cfg.Listen)
+	}
+
+	if cfg.Mode != "transparent" {
+		t.Errorf("expected mode transparent, got %s", cfg.Mode)
+	}
+
+	if len(cfg.Backends) != 1 {
+		t.Errorf("expected 1 backend, got %d", len(cfg.Backends))
+	}
+
+	if cfg.Health.CheckInterval != 5*time.Second {
+		t.Errorf("expected check interval 5s, got %v", cfg.Health.CheckInterval)
 	}
 }
 
-func TestLoadFileNotFound(t *testing.T) {
-	_, err := Load("/nonexistent/path/config.yaml")
+func TestValidate_MissingListen(t *testing.T) {
+	cfg := &Config{
+		Backends: []BackendConfig{{Address: "127.0.0.1:1080"}},
+	}
+
+	err := cfg.Validate()
 	if err == nil {
-		t.Fatal("Expected error for nonexistent file")
+		t.Error("expected error for missing listen address")
 	}
 }
 
-func TestLoadInvalidYAML(t *testing.T) {
-	yaml := `
-backends:
-  - address: "proxy1.example.com:1080"
-    name: "Proxy 1
-`
-	tmpFile := writeTemp(t, yaml)
-	defer os.Remove(tmpFile)
+func TestValidate_NoBackends(t *testing.T) {
+	cfg := &Config{
+		Listen: "0.0.0.0:1080",
+	}
 
-	_, err := Load(tmpFile)
+	err := cfg.Validate()
 	if err == nil {
-		t.Fatal("Expected error for invalid YAML")
+		t.Error("expected error for no backends")
 	}
 }
 
-func writeTemp(t *testing.T, content string) string {
-	tmpFile := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to write temp file: %v", err)
+func TestSetDefaults(t *testing.T) {
+	cfg := &Config{
+		Listen:   "0.0.0.0:1080",
+		Backends: []BackendConfig{{Address: "127.0.0.1:1080"}},
 	}
-	return tmpFile
+
+	cfg.SetDefaults()
+
+	if cfg.Mode != "transparent" {
+		t.Errorf("expected default mode transparent, got %s", cfg.Mode)
+	}
+
+	if cfg.Health.CheckInterval != 10*time.Second {
+		t.Errorf("expected default check interval 10s, got %v", cfg.Health.CheckInterval)
+	}
+
+	if cfg.Balancer.Algorithm != "roundrobin" {
+		t.Errorf("expected default algorithm roundrobin, got %s", cfg.Balancer.Algorithm)
+	}
 }

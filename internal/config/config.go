@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -18,9 +20,9 @@ type Config struct {
 	Log      LogConfig        `yaml:"log"`
 }
 
-// BackendConfig represents a single backend server
+// BackendConfig represents a single backend server or port range
 type BackendConfig struct {
-	Address string `yaml:"address"`
+	Address string `yaml:"address"` // Supports "host:port" or "host:port-port" for ranges
 	Name    string `yaml:"name"`
 }
 
@@ -79,6 +81,11 @@ func (c *Config) Validate() error {
 		if b.Address == "" {
 			return fmt.Errorf("backend %d: address is required", i)
 		}
+
+		// Validate address format (supports ranges)
+		if _, err := ParseAddress(b.Address); err != nil {
+			return fmt.Errorf("backend %d (%s): invalid address: %w", i, b.Name, err)
+		}
 	}
 
 	return nil
@@ -120,4 +127,129 @@ func (c *Config) SetDefaults() {
 	if c.Log.Format == "" {
 		c.Log.Format = "text"
 	}
+}
+
+// ParseAddress parses a backend address and returns individual addresses
+// Supports:
+//   - "host:port" (returns single address)
+//   - "host:port-port" (returns range of addresses)
+//   - "[ipv6]:port" or "[ipv6]:port-port"
+func ParseAddress(addr string) ([]string, error) {
+	// Handle IPv6 addresses
+	var host string
+	var portPart string
+
+	if strings.HasPrefix(addr, "[") {
+		// IPv6 format: [host]:port or [host]:port-port
+		closingBracket := strings.Index(addr, "]")
+		if closingBracket == -1 {
+			return nil, fmt.Errorf("invalid IPv6 format: missing closing bracket")
+		}
+		host = addr[1:closingBracket]
+		if len(addr) <= closingBracket+1 || addr[closingBracket+1] != ':' {
+			return nil, fmt.Errorf("invalid IPv6 format: missing port")
+		}
+		portPart = addr[closingBracket+2:]
+	} else {
+		// IPv4 or hostname: host:port or host:port-port
+		lastColon := strings.LastIndex(addr, ":")
+		if lastColon == -1 {
+			return nil, fmt.Errorf("invalid address format: missing port")
+		}
+		host = addr[:lastColon]
+		portPart = addr[lastColon+1:]
+	}
+
+	// Check if port part contains a range
+	if strings.Contains(portPart, "-") {
+		// Port range: start-end
+		parts := strings.SplitN(portPart, "-", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid port range format")
+		}
+
+		startPort, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid start port: %w", err)
+		}
+
+		endPort, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid end port: %w", err)
+		}
+
+		if startPort < 1 || startPort > 65535 {
+			return nil, fmt.Errorf("start port out of range: %d", startPort)
+		}
+
+		if endPort < 1 || endPort > 65535 {
+			return nil, fmt.Errorf("end port out of range: %d", endPort)
+		}
+
+		if startPort > endPort {
+			return nil, fmt.Errorf("start port (%d) greater than end port (%d)", startPort, endPort)
+		}
+
+		if endPort-startPort > 1000 {
+			return nil, fmt.Errorf("port range too large (max 1000): %d-%d", startPort, endPort)
+		}
+
+		// Expand range
+		addresses := make([]string, 0, endPort-startPort+1)
+		for port := startPort; port <= endPort; port++ {
+			if strings.Contains(host, ":") {
+				// IPv6
+				addresses = append(addresses, fmt.Sprintf("[%s]:%d", host, port))
+			} else {
+				// IPv4 or hostname
+				addresses = append(addresses, fmt.Sprintf("%s:%d", host, port))
+			}
+		}
+		return addresses, nil
+	} else {
+		// Single port
+		port, err := strconv.Atoi(strings.TrimSpace(portPart))
+		if err != nil {
+			return nil, fmt.Errorf("invalid port: %w", err)
+		}
+
+		if port < 1 || port > 65535 {
+			return nil, fmt.Errorf("port out of range: %d", port)
+		}
+
+		return []string{addr}, nil
+	}
+}
+
+// ExpandBackends expands port ranges in backend configurations
+func (c *Config) ExpandBackends() []BackendConfig {
+	expanded := make([]BackendConfig, 0)
+
+	for _, backend := range c.Backends {
+		addresses, err := ParseAddress(backend.Address)
+		if err != nil {
+			// Should not happen as validation already passed
+			continue
+		}
+
+		if len(addresses) == 1 {
+			// Single address, keep as is
+			expanded = append(expanded, backend)
+		} else {
+			// Expanded range, create individual backends
+			for i, addr := range addresses {
+				name := backend.Name
+				if name != "" && len(addresses) > 1 {
+					// Append port number to name for ranges
+					name = fmt.Sprintf("%s#%d", backend.Name, i+1)
+				}
+				expanded = append(expanded, BackendConfig{
+					Address: addr,
+					Name:    name,
+				})
+			}
+		}
+	}
+
+	return expanded
 }
