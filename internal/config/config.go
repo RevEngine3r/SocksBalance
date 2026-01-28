@@ -8,119 +8,116 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config represents the application configuration
 type Config struct {
-	Listen   string         `yaml:"listen"`
-	Backends []Backend      `yaml:"backends"`
-	Health   HealthConfig   `yaml:"health"`
-	Balancer BalancerConfig `yaml:"balancer"`
-	Log      LogConfig      `yaml:"log"`
+	Listen   string            `yaml:"listen"`
+	Mode     string            `yaml:"mode"` // "transparent" or "socks5"
+	Backends []BackendConfig  `yaml:"backends"`
+	Health   HealthConfig     `yaml:"health"`
+	Balancer BalancerConfig   `yaml:"balancer"`
+	Log      LogConfig        `yaml:"log"`
 }
 
-type Backend struct {
+// BackendConfig represents a single backend server
+type BackendConfig struct {
 	Address string `yaml:"address"`
 	Name    string `yaml:"name"`
 }
 
+// HealthConfig represents health check settings
 type HealthConfig struct {
-	ConnectTimeout   time.Duration `yaml:"connect_timeout"`
 	TestURL          string        `yaml:"test_url"`
 	CheckInterval    time.Duration `yaml:"check_interval"`
+	ConnectTimeout   time.Duration `yaml:"connect_timeout"`
 	RequestTimeout   time.Duration `yaml:"request_timeout"`
 	FailureThreshold int           `yaml:"failure_threshold"`
 }
 
+// BalancerConfig represents load balancer settings
 type BalancerConfig struct {
-	Algorithm        string `yaml:"algorithm"`
-	SortByLatency    bool   `yaml:"sort_by_latency"`
-	LatencyTolerance int    `yaml:"latency_tolerance"`
+	Algorithm string `yaml:"algorithm"`
 }
 
+// LogConfig represents logging settings
 type LogConfig struct {
 	Level  string `yaml:"level"`
 	Format string `yaml:"format"`
 }
 
-// Load reads and parses a YAML configuration file
+// Load reads and parses the configuration file
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	applyDefaults(&cfg)
-
-	if err := validate(&cfg); err != nil {
-		return nil, err
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
+
+	cfg.SetDefaults()
 
 	return &cfg, nil
 }
 
-func applyDefaults(cfg *Config) {
-	if cfg.Listen == "" {
-		cfg.Listen = "0.0.0.0:1080"
-	}
-	if cfg.Health.ConnectTimeout == 0 {
-		cfg.Health.ConnectTimeout = 5 * time.Second
-	}
-	if cfg.Health.CheckInterval == 0 {
-		cfg.Health.CheckInterval = 10 * time.Second
-	}
-	if cfg.Health.RequestTimeout == 0 {
-		cfg.Health.RequestTimeout = 10 * time.Second
-	}
-	if cfg.Health.FailureThreshold == 0 {
-		cfg.Health.FailureThreshold = 3
-	}
-	if cfg.Balancer.Algorithm == "" {
-		cfg.Balancer.Algorithm = "roundrobin"
-	}
-	if cfg.Balancer.LatencyTolerance == 0 {
-		cfg.Balancer.LatencyTolerance = 50
-	}
-	if cfg.Log.Level == "" {
-		cfg.Log.Level = "info"
-	}
-	if cfg.Log.Format == "" {
-		cfg.Log.Format = "text"
-	}
-}
-
-func validate(cfg *Config) error {
-	if len(cfg.Backends) == 0 {
-		return fmt.Errorf("at least one backend required")
+// Validate checks if configuration is valid
+func (c *Config) Validate() error {
+	if c.Listen == "" {
+		return fmt.Errorf("listen address is required")
 	}
 
-	for i, b := range cfg.Backends {
+	if len(c.Backends) == 0 {
+		return fmt.Errorf("at least one backend is required")
+	}
+
+	for i, b := range c.Backends {
 		if b.Address == "" {
-			return fmt.Errorf("backend[%d]: address is required", i)
+			return fmt.Errorf("backend %d: address is required", i)
 		}
 	}
 
-	if cfg.Health.ConnectTimeout < 0 {
-		return fmt.Errorf("connect_timeout must be positive")
-	}
-	if cfg.Health.CheckInterval < 0 {
-		return fmt.Errorf("check_interval must be positive")
-	}
-	if cfg.Health.FailureThreshold < 1 {
-		return fmt.Errorf("failure_threshold must be >= 1")
-	}
-
-	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
-	if !validLevels[cfg.Log.Level] {
-		return fmt.Errorf("invalid log level: %s (must be debug, info, warn, or error)", cfg.Log.Level)
-	}
-
-	validFormats := map[string]bool{"text": true, "json": true}
-	if !validFormats[cfg.Log.Format] {
-		return fmt.Errorf("invalid log format: %s (must be text or json)", cfg.Log.Format)
-	}
-
 	return nil
+}
+
+// SetDefaults sets default values for optional fields
+func (c *Config) SetDefaults() {
+	// Mode defaults
+	if c.Mode == "" {
+		c.Mode = "transparent" // Default to transparent (zero-copy)
+	}
+
+	// Health check defaults
+	if c.Health.CheckInterval == 0 {
+		c.Health.CheckInterval = 10 * time.Second
+	}
+	if c.Health.ConnectTimeout == 0 {
+		c.Health.ConnectTimeout = 5 * time.Second
+	}
+	if c.Health.RequestTimeout == 0 {
+		c.Health.RequestTimeout = 10 * time.Second
+	}
+	if c.Health.FailureThreshold == 0 {
+		c.Health.FailureThreshold = 3
+	}
+	if c.Health.TestURL == "" {
+		c.Health.TestURL = "https://www.google.com"
+	}
+
+	// Balancer defaults
+	if c.Balancer.Algorithm == "" {
+		c.Balancer.Algorithm = "roundrobin"
+	}
+
+	// Log defaults
+	if c.Log.Level == "" {
+		c.Log.Level = "info"
+	}
+	if c.Log.Format == "" {
+		c.Log.Format = "text"
+	}
 }
