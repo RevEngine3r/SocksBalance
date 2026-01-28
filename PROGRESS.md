@@ -2,7 +2,79 @@
 
 ## Active Feature: Web UI Dashboard
 
-### Current Step: STEP4 - AJAX Auto-Update
+### Current Step: STEP5 - Integration & Configuration
+**Status**: ✅ Completed  
+**Completed**: 2026-01-28
+
+#### Implemented
+- ✅ Added WebConfig struct to `internal/config/config.go`
+- ✅ Web configuration fields:
+  - `enabled` (bool) - Enable/disable dashboard
+  - `listen` (string) - Listen address (default: 127.0.0.1:8080)
+  - `refresh_interval` (int) - Frontend refresh seconds (default: 2)
+- ✅ Updated `config.example.yaml` with web section
+- ✅ Integrated web server in `cmd/socksbalance/main.go`
+- ✅ Start web server in separate goroutine (conditional)
+- ✅ Graceful shutdown for web server
+- ✅ Configuration validation for web settings
+- ✅ Default: disabled for security (opt-in)
+- ✅ Bind to localhost by default (127.0.0.1)
+
+#### Changes Summary
+**Modified Files**:
+- `internal/config/config.go` - Added WebConfig struct
+- `config.example.yaml` - Added web section with documentation
+- `cmd/socksbalance/main.go` - Integrated web server startup/shutdown
+
+**Configuration Format**:
+```yaml
+web:
+  enabled: true                  # Enable dashboard
+  listen: "127.0.0.1:8080"       # Localhost only (secure)
+  refresh_interval: 2            # Poll every 2 seconds
+```
+
+**Security Defaults**:
+- Disabled by default (must explicitly enable)
+- Binds to 127.0.0.1 (localhost only)
+- Read-only API (no write operations)
+- No authentication (v1 - add later if needed)
+
+**Startup Flow**:
+```
+1. Load config
+2. Initialize backend pool
+3. Start health checker
+4. IF web.enabled:
+   ├─ Create web server
+   ├─ Start in goroutine
+   └─ Log dashboard URL
+5. Start proxy server
+6. Wait for shutdown signal
+7. Stop web server (if running)
+8. Stop health checker
+9. Stop proxy server
+```
+
+**Console Output**:
+```
+SocksBalance v0.6.0
+[INFO] Configuration loaded successfully
+  ...
+  Web Dashboard: enabled on 127.0.0.1:8080 (refresh: 2s)
+[INFO] Starting web dashboard on 127.0.0.1:8080...
+[INFO] Web dashboard started successfully
+[INFO] Access dashboard at: http://127.0.0.1:8080
+...
+[INFO] Monitor backends via web dashboard: http://127.0.0.1:8080
+```
+
+#### Next Step
+**STEP6: Polish & Documentation** - Final touches and comprehensive docs
+
+---
+
+### Completed: STEP4 - AJAX Auto-Update
 **Status**: ✅ Completed  
 **Completed**: 2026-01-28
 
@@ -10,61 +82,9 @@
 - ✅ JavaScript fetch() API for /api/stats
 - ✅ Auto-refresh every 2 seconds with setInterval
 - ✅ Dynamic table population from JSON
-- ✅ Color-coded latency thresholds:
-  - Green: < 100ms (fast)
-  - Yellow: 100-500ms (medium)
-  - Red: ≥ 500ms (slow)
-- ✅ Status badges with visual icons (✓/✗)
-- ✅ Summary stats auto-update (total/healthy/unhealthy)
-- ✅ Last updated timestamp with formatting
-- ✅ Relative time display ("Just now", "5s ago", etc.)
+- ✅ Color-coded latency thresholds
+- ✅ Status badges with visual icons
 - ✅ Error handling with retry logic
-- ✅ Empty state handling (no backends)
-- ✅ Graceful cleanup on page unload
-
-#### Changes Summary
-**Modified Files**:
-- `internal/web/dashboard.go` - Added complete JavaScript implementation
-
-**JavaScript Features**:
-- **Auto-refresh**: 2-second interval
-- **Smart formatting**:
-  - Latency: Color-coded with class names
-  - Timestamps: Human-readable format
-  - Relative time: "Just now", "5s ago", "2m ago"
-- **Error handling**: Displays error message, continues retrying
-- **Edge cases**: Empty backend list, zero latency, missing data
-- **Memory management**: Timer cleanup on unload
-
-**Data Flow**:
-```
-setInterval (2s)
-  ↓
-fetch('/api/stats')
-  ↓
-Parse JSON
-  ↓
-Update Stats Cards (total, healthy, unhealthy)
-  ↓
-Build Table HTML
-  ├─ Status Badge (colored)
-  ├─ Backend Name
-  ├─ Address (monospace)
-  ├─ Latency (color-coded)
-  └─ Last Check (relative time)
-  ↓
-Inject into DOM
-  ↓
-Update "Last Updated" timestamp
-```
-
-**Error States**:
-- Network failure: Shows error message, retries automatically
-- Empty data: Shows "No backends configured"
-- Invalid JSON: Caught by error handler
-
-#### Next Step
-**STEP5: Integration & Configuration** - Add web config to YAML and integrate with main.go
 
 ---
 
@@ -73,14 +93,10 @@ Update "Last Updated" timestamp
 **Completed**: 2026-01-28
 
 #### Implemented
-- ✅ Created `internal/web/dashboard.go` with embedded HTML
-- ✅ Modern dark theme (#1a1a2e background with gradients)
+- ✅ Modern dark theme with gradients
 - ✅ Responsive card-based layout
-- ✅ Header with gradient title and summary stats
-- ✅ Color-coded latency indicators
-- ✅ Status badges with visual icons
-- ✅ Glassmorphism effects (backdrop-filter)
-- ✅ Mobile-responsive design (3 breakpoints)
+- ✅ Glassmorphism effects
+- ✅ Mobile-responsive design
 
 ---
 
@@ -89,11 +105,9 @@ Update "Last Updated" timestamp
 **Completed**: 2026-01-28
 
 #### Implemented
-- ✅ Created `internal/web/stats.go` with data structures
 - ✅ Real `/api/stats` handler fetching pool data
 - ✅ Sorting by latency (fastest first, unhealthy last)
 - ✅ CORS headers for development
-- ✅ Comprehensive unit tests (8 test cases)
 
 ---
 
@@ -102,11 +116,9 @@ Update "Last Updated" timestamp
 **Completed**: 2026-01-28
 
 #### Implemented
-- ✅ Created `internal/web/server.go` with Server struct
-- ✅ Implemented Start/Stop lifecycle methods
-- ✅ Added basic routes (/, /api/stats, /health)
-- ✅ Comprehensive unit tests (10 test cases)
-- ✅ Graceful shutdown with 5-second timeout
+- ✅ HTTP server with Start/Stop lifecycle
+- ✅ Graceful shutdown with timeout
+- ✅ Comprehensive unit tests
 
 ---
 
@@ -144,12 +156,13 @@ Added **`max_active_backends`** option to limit concurrent backend usage for ant
 - ✅ **WEB-STEP1**: HTTP Server Foundation
 - ✅ **WEB-STEP2**: JSON API Endpoint
 - ✅ **WEB-STEP3**: Dashboard HTML/CSS
-- ✅ **WEB-STEP4**: AJAX Auto-Update (NEW)
+- ✅ **WEB-STEP4**: AJAX Auto-Update
+- ✅ **WEB-STEP5**: Integration & Configuration (NEW)
 
 ## Project Metrics
 
-- **Total Development Time**: ~14 hours
-- **Lines of Code**: ~6,100+
+- **Total Development Time**: ~14.5 hours
+- **Lines of Code**: ~6,800+
 - **Test Coverage**: 88+ unit tests, 4 integration tests
 - **Dependencies**: Minimal (Go stdlib + yaml + x/net)
 - **Performance**: < 0.1ms routing overhead (transparent mode)
@@ -165,5 +178,6 @@ Added **`max_active_backends`** option to limit concurrent backend usage for ant
 - ✅ **HTTP Server**: Foundation complete with lifecycle management
 - ✅ **JSON API**: Real backend data endpoint with sorting
 - ✅ **Dashboard UI**: Modern dark theme with responsive design
-- ✅ **AJAX Updates**: Real-time auto-refresh every 2 seconds (NEW)
-- ⏳ **Integration**: Next - add config and wire up with main.go
+- ✅ **AJAX Updates**: Real-time auto-refresh every 2 seconds
+- ✅ **Integration**: Config system and main.go integration (NEW)
+- ⏳ **Polish**: Next - final touches and documentation

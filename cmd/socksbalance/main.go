@@ -13,9 +13,10 @@ import (
 	"github.com/RevEngine3r/SocksBalance/internal/config"
 	"github.com/RevEngine3r/SocksBalance/internal/health"
 	"github.com/RevEngine3r/SocksBalance/internal/proxy"
+	"github.com/RevEngine3r/SocksBalance/internal/web"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to configuration file")
@@ -97,6 +98,11 @@ func main() {
 	} else {
 		fmt.Printf("  Max Active Backends: unlimited (use all available backends)\n")
 	}
+	if cfg.Web.Enabled {
+		fmt.Printf("  Web Dashboard: enabled on %s (refresh: %ds)\n", cfg.Web.Listen, cfg.Web.RefreshInterval)
+	} else {
+		fmt.Printf("  Web Dashboard: disabled\n")
+	}
 	fmt.Printf("  Log Level: %s\n", cfg.Log.Level)
 
 	// Initialize backend pool with expanded backends
@@ -151,6 +157,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start web dashboard if enabled
+	var webServer *web.Server
+	if cfg.Web.Enabled {
+		fmt.Printf("[INFO] Starting web dashboard on %s...\n", cfg.Web.Listen)
+		webServer = web.NewServer(cfg.Web.Listen, pool)
+		if err := webServer.Start(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "[ERROR] Failed to start web dashboard: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("[INFO] Web dashboard started successfully\n")
+		fmt.Printf("[INFO] Access dashboard at: http://%s\n", cfg.Web.Listen)
+	}
+
 	// Start proxy server based on mode
 	fmt.Printf("[INFO] Starting proxy server on %s...\n", cfg.Listen)
 
@@ -185,6 +204,9 @@ func main() {
 	if cfg.Balancer.MaxActiveBackends > 0 {
 		fmt.Printf("[INFO] GFW Evasion: Rotating through top %d fastest backends only\n", cfg.Balancer.MaxActiveBackends)
 	}
+	if cfg.Web.Enabled {
+		fmt.Printf("[INFO] Monitor backends via web dashboard: http://%s\n", cfg.Web.Listen)
+	}
 	fmt.Println("[INFO] Press Ctrl+C to stop...")
 
 	// Wait for shutdown signal
@@ -195,6 +217,13 @@ func main() {
 	fmt.Println("\n[INFO] Shutdown signal received...")
 
 	cancel()
+
+	// Stop web server if running
+	if webServer != nil {
+		if err := webServer.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "[WARN] Failed to stop web server: %v\n", err)
+		}
+	}
 
 	if err := healthChecker.Stop(); err != nil {
 		fmt.Fprintf(os.Stderr, "[WARN] Failed to stop health checker: %v\n", err)

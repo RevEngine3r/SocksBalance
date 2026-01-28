@@ -77,6 +77,20 @@ balancer:
   # Example: If you have 20 Tor circuits, only use the 3 fastest
   max_active_backends: 3
 
+# Web dashboard configuration (NEW!)
+web:
+  # Enable web monitoring dashboard
+  enabled: true
+  
+  # Dashboard listen address
+  # SECURITY: Bind to 127.0.0.1 (localhost) by default
+  # Only change to 0.0.0.0 if you need remote access (not recommended)
+  listen: "127.0.0.1:8080"
+  
+  # Frontend auto-refresh interval in seconds
+  # How often the dashboard polls for backend updates
+  refresh_interval: 2
+
 # Logging configuration
 log:
   # Level: debug, info, warn, error
