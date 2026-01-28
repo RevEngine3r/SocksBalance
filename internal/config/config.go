@@ -37,7 +37,9 @@ type HealthConfig struct {
 
 // BalancerConfig represents load balancer settings
 type BalancerConfig struct {
-	Algorithm string `yaml:"algorithm"`
+	Algorithm         string        `yaml:"algorithm"`
+	MaxLatency        time.Duration `yaml:"max_latency"`         // Only use backends with latency <= this value (0 = no limit)
+	StickySessionTTL  time.Duration `yaml:"sticky_session_ttl"`  // How long to keep client -> backend mapping (0 = disabled)
 }
 
 // LogConfig represents logging settings
@@ -118,6 +120,12 @@ func (c *Config) SetDefaults() {
 	// Balancer defaults
 	if c.Balancer.Algorithm == "" {
 		c.Balancer.Algorithm = "roundrobin"
+	}
+	if c.Balancer.MaxLatency == 0 {
+		c.Balancer.MaxLatency = 0 // 0 = no limit (use all backends)
+	}
+	if c.Balancer.StickySessionTTL == 0 {
+		c.Balancer.StickySessionTTL = 5 * time.Minute // Default 5 minutes
 	}
 
 	// Log defaults
