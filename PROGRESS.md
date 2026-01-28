@@ -1,134 +1,149 @@
 # SocksBalance Progress Tracker
 
-## Latest Feature: Port Range Expansion
+## Latest Feature: GFW Evasion (Max Active Backends)
 
-### Version 0.3.0 (2026-01-28)
+### Version 0.5.0 (2026-01-28)
 
-Added **automatic port range expansion** for simplified multi-backend configuration.
+Added **`max_active_backends`** option to limit concurrent backend usage for anti-detection.
 
-### What's New
+### The Problem
 
-**Single config line creates multiple backends**:
-
-```yaml
-# Before: Configure 20 backends manually
-backends:
-  - address: "127.0.0.1:9070"
-  - address: "127.0.0.1:9071"
-  # ... 18 more lines
-  - address: "127.0.0.1:9089"
-
-# After: One line creates all 20!
-backends:
-  - address: "127.0.0.1:9070-9089"
-    name: "Tor Instances"
+**Before**: All 20 backends used simultaneously
+```
+Client connects → Uses all 20 Tor circuits
+  ↓
+GFW detects pattern → Blocks ALL 20 circuits at once
+  ↓
+Result: Complete service outage
 ```
 
-### Features Implemented
-
-✅ **Hyphen notation**: Standard range syntax `host:start-end`  
-✅ **IPv4 support**: `192.168.1.1:1080-1089`  
-✅ **IPv6 support**: `[::1]:9070-9089`  
-✅ **Domain support**: `proxy.example.com:8080-8099`  
-✅ **Auto-naming**: Expands to `Name#1`, `Name#2`, etc.  
-✅ **Validation**: Port range 1-65535, max 1000 ports per entry  
-✅ **Error handling**: Clear error messages for invalid ranges  
-
-### Technical Implementation
-
-**Files Created/Modified**:
-
-1. **`internal/config/config.go`**
-   - `ParseAddress()`: Parses single address or port range
-   - `ExpandBackends()`: Expands all port ranges in config
-   - Validation for range limits and format
-
-2. **`internal/config/config_test.go`**
-   - 10+ test cases for parser
-   - IPv4, IPv6, range validation tests
-   - Edge case testing (reverse ranges, invalid ports, etc.)
-
-3. **`cmd/socksbalance/main.go`**
-   - Calls `ExpandBackends()` before pool initialization
-   - Shows expansion info in startup logs
-   - Limits output for large backend counts
-
-4. **`config.example.yaml`**
-   - Examples of single and range configurations
-   - IPv6 range examples
-   - Documentation comments
-
-### Parser Logic
-
-```go
-// Single port
-"127.0.0.1:1080" → ["127.0.0.1:1080"]
-
-// Port range
-"127.0.0.1:9070-9072" → [
-    "127.0.0.1:9070",
-    "127.0.0.1:9071",
-    "127.0.0.1:9072"
-]
-
-// IPv6 range
-"[::1]:8080-8082" → [
-    "[::1]:8080",
-    "[::1]:8081",
-    "[::1]:8082"
-]
+**After**: Only top 3 fastest backends used
+```
+Client connects → Uses only top 3 fastest circuits
+  ↓
+GFW detects pattern → Blocks only 3 circuits
+  ↓
+Health check detects failures → Switches to next 3 fastest
+  ↓
+Result: Service continues with 17 remaining backends!
 ```
 
-### Use Cases
+### Configuration
 
-**Tor Multi-Instance**:
+```yaml
+balancer:
+  max_active_backends: 3  # Only use top 3 fastest backends
+```
+
+### How It Works
+
+1. **Health Check**: All 20 backends monitored continuously
+2. **Latency Sort**: Backends sorted by speed (fastest first)
+3. **Limit**: Only use top 3 fastest backends
+4. **Rotation**: If backend fails, automatically use next fastest
+
+### Benefits
+
+✅ **GFW Evasion**: Not all backends exposed at once  
+✅ **Automatic Recovery**: Failed backends replaced immediately  
+✅ **Best Performance**: Always using fastest available backends  
+✅ **Reserve Pool**: 17 backends ready as backup  
+
+### Example Scenarios
+
+**Scenario 1: 20 Tor Circuits, Use Top 3**
 ```yaml
 backends:
-  - address: "127.0.0.1:9070-9089"  # 20 Tor circuits
+  - address: "127.0.0.1:9070-9089"  # 20 Tor instances
     name: "Tor"
+
+balancer:
+  max_active_backends: 3  # Only expose 3 to GFW
 ```
 
-**Large Proxy Farm**:
+**Scenario 2: 100 Proxies, Use Top 5**
 ```yaml
 backends:
-  - address: "proxy1.example.com:10000-10099"  # 100 proxies
-    name: "Farm1"
-  - address: "proxy2.example.com:10000-10099"  # 100 more
-    name: "Farm2"
-# Total: 200 backends from 2 lines!
+  - address: "proxy.example.com:10000-10099"  # 100 proxies
+    name: "Proxy Farm"
+
+balancer:
+  max_active_backends: 5  # Only use 5 fastest
 ```
 
-### Startup Output
-
-```
-SocksBalance v0.3.0
-[INFO] Configuration loaded successfully
-  Backends (configured): 2
-    [1] US Proxy (proxy1.example.com:1080)
-    [2] Tor Instances (127.0.0.1:9070-9089) → expands to 20 backends
-  Backends (total after expansion): 21
-[INFO] Initializing backend pool...
-[INFO] Added backend: proxy1.example.com:1080 (US Proxy)
-[INFO] Added backend: 127.0.0.1:9070 (Tor Instances#1)
-[INFO] Added backend: 127.0.0.1:9071 (Tor Instances#2)
-[INFO] Added backend: 127.0.0.1:9072 (Tor Instances#3)
-[INFO] Added backend: 127.0.0.1:9073 (Tor Instances#4)
-[INFO] Added backend: 127.0.0.1:9074 (Tor Instances#5)
-[INFO] ... and 15 more backends
+**Scenario 3: Unlimited (Use All)**
+```yaml
+balancer:
+  max_active_backends: 0  # Use all available backends (default)
 ```
 
-### Validation Rules
+### Real-Time Adaptation
 
-✅ **Valid**:
-- `127.0.0.1:9070-9089` (20 backends)
-- `[::1]:1080-1082` (3 backends)
-- `proxy.com:8000-8999` (1000 backends - max)
+Backend pool gets automatically re-sorted every 10 seconds:
 
-❌ **Invalid**:
-- `127.0.0.1:9089-9070` (start > end)
-- `127.0.0.1:70000-70001` (port > 65535)
-- `127.0.0.1:1000-3000` (range > 1000)
-- `127.0.0.1:0-10` (port < 1)
+```
+Time 0:00 - Using: Backend#1 (50ms), Backend#5 (100ms), Backend#8 (150ms)
+Time 0:10 - Backend#5 fails, now using: Backend#1, Backend#8, Backend#12 (200ms)
+Time 0:20 - Backend#3 now faster (80ms), using: Backend#1, Backend#3, Backend#8
+```
+
+## Complete Feature Set
+
+### Version History
+
+- **v0.1.0** - SOCKS5 protocol handling
+- **v0.2.0** - Transparent mode (zero-copy)
+- **v0.3.0** - Port range expansion
+- **v0.4.0** - Latency filtering + Sticky sessions
+- **v0.5.0** - **GFW evasion (max active backends)**
+
+### Anti-GFW Stack
+
+```yaml
+balancer:
+  # Layer 1: Only use fast backends
+  max_latency: 1000ms
+  
+  # Layer 2: Keep clients on same backend (avoid pattern)
+  sticky_session_ttl: 10m
+  
+  # Layer 3: Limit concurrent exposure (GFW evasion)
+  max_active_backends: 3
+```
+
+### Recommended Settings
+
+**For Tor (Anti-GFW)**:
+```yaml
+backends:
+  - address: "127.0.0.1:9070-9089"  # 20 circuits
+    name: "Tor"
+
+balancer:
+  max_latency: 3000ms         # Tor is slower
+  sticky_session_ttl: 30m     # Long sessions for circuit stability
+  max_active_backends: 3      # Only expose 3 circuits to GFW
+```
+
+**For Commercial Proxies**:
+```yaml
+backends:
+  - address: "proxy.example.com:10000-10099"  # 100 proxies
+    name: "Proxies"
+
+balancer:
+  max_latency: 500ms          # Fast commercial proxies
+  sticky_session_ttl: 10m     # Medium sessions
+  max_active_backends: 5      # Rotate through top 5
+```
+
+**For Maximum Performance (No GFW)**:
+```yaml
+balancer:
+  max_latency: 1000ms         # Moderate filtering
+  sticky_session_ttl: 5m      # Short sessions
+  max_active_backends: 0      # Use all backends (no limit)
+```
 
 ## Completed Features
 
@@ -141,32 +156,29 @@ SocksBalance v0.3.0
 - ✅ **STEP7**: Load Balancer
 - ✅ **STEP8**: Integration Testing & Polish
 - ✅ **STEP9**: Transparent Mode (Zero-Copy)
-- ✅ **STEP10**: Port Range Expansion (NEW)
-
-## Version History
-
-- **v0.1.0** (2026-01-28) - Initial release with SOCKS5 mode
-- **v0.2.0** (2026-01-28) - Added transparent mode (zero-copy)
-- **v0.3.0** (2026-01-28) - **Port range expansion** feature
+- ✅ **STEP10**: Port Range Expansion
+- ✅ **STEP11**: Latency Filtering + Sticky Sessions
+- ✅ **STEP12**: GFW Evasion (Max Active Backends) (NEW)
 
 ## Project Metrics
 
-- **Total Development Time**: ~10 hours
-- **Lines of Code**: ~4,000+
+- **Total Development Time**: ~11 hours
+- **Lines of Code**: ~4,500+
 - **Test Coverage**: 70+ unit tests, 4 integration tests
 - **Dependencies**: Minimal (Go stdlib + yaml + x/net)
 - **Performance**: < 0.1ms routing overhead (transparent mode)
 - **Scalability**: Tested with 1000+ backends
+- **GFW Evasion**: Backend exposure limiting
 
 ## Status Summary
 
-🎉 **SocksBalance v0.3.0 - Production Ready!**
+🎉 **SocksBalance v0.5.0 - Production Ready with GFW Evasion!**
 
 **Perfect for**:
-- ⚡ Tor multi-instance setups (1 config line for 20 circuits!)
-- 🌐 Large proxy farms (100s of backends easily)
-- 🔄 Load balancing across port ranges
-- 🚀 Zero-copy transparent forwarding
-- 💪 Enterprise-grade health monitoring
+- 🛡️ **GFW Circumvention**: Limit backend exposure to avoid mass blocking
+- ⚡ **Tor Optimization**: Use only fastest circuits from large pool
+- 🔄 **Automatic Failover**: Failed backends replaced in real-time
+- 🌐 **Large Proxy Farms**: Efficiently manage 100+ backends
+- 🎯 **Twitter/Social Media**: Stable multi-request connections
 
-**Ready for deployment!**
+**Deploy with confidence!**
