@@ -1,0 +1,49 @@
+# SocksBalance Configuration
+
+# TCP listen address for incoming SOCKS5 client connections
+listen: "0.0.0.0:1080"
+
+# Backend SOCKS5 servers
+backends:
+  - address: "proxy1.example.com:1080"
+    name: "Proxy 1"
+    
+  - address: "proxy2.example.com:1080"
+    name: "Proxy 2"
+    
+  - address: "127.0.0.1:9050"
+    name: "Local Tor"
+
+# Health check configuration
+health:
+  # Initial connection test timeout
+  connect_timeout: 5s
+  
+  # URL to test for latency measurement (HTTP/HTTPS)
+  test_url: "https://www.google.com"
+  
+  # Interval between latency tests
+  check_interval: 10s
+  
+  # Request timeout for URL test
+  request_timeout: 10s
+  
+  # Mark backend as unhealthy after N consecutive failures
+  failure_threshold: 3
+
+# Load balancing configuration
+balancer:
+  # Algorithm: roundrobin
+  algorithm: "roundrobin"
+  
+  # Sort backends by latency before routing
+  sort_by_latency: true
+  
+  # Maximum latency difference (ms) to consider backends "equal"
+  # Backends within this range are treated as same tier
+  latency_tolerance: 50
+
+# Logging
+log:
+  level: "info"  # debug, info, warn, error
+  format: "text"  # text, json
