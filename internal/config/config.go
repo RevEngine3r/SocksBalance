@@ -17,6 +17,7 @@ type Config struct {
 	Backends []BackendConfig  `yaml:"backends"`
 	Health   HealthConfig     `yaml:"health"`
 	Balancer BalancerConfig   `yaml:"balancer"`
+	Web      WebConfig        `yaml:"web"`
 	Log      LogConfig        `yaml:"log"`
 }
 
@@ -41,6 +42,13 @@ type BalancerConfig struct {
 	MaxLatency        time.Duration `yaml:"max_latency"`         // Only use backends with latency <= this value (0 = no limit)
 	StickySessionTTL  time.Duration `yaml:"sticky_session_ttl"`  // How long to keep client -> backend mapping (0 = disabled)
 	MaxActiveBackends int           `yaml:"max_active_backends"` // Maximum number of backends to use concurrently (0 = use all)
+}
+
+// WebConfig represents web dashboard settings
+type WebConfig struct {
+	Enabled         bool   `yaml:"enabled"`          // Enable web dashboard
+	Listen          string `yaml:"listen"`           // Web server listen address (default: 127.0.0.1:8080)
+	RefreshInterval int    `yaml:"refresh_interval"` // Frontend refresh interval in seconds (default: 2)
 }
 
 // LogConfig represents logging settings
@@ -95,6 +103,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("max_active_backends cannot be negative")
 	}
 
+	// Web config validation
+	if c.Web.RefreshInterval < 0 {
+		return fmt.Errorf("web refresh_interval cannot be negative")
+	}
+
 	return nil
 }
 
@@ -133,6 +146,15 @@ func (c *Config) SetDefaults() {
 		c.Balancer.StickySessionTTL = 5 * time.Minute // Default 5 minutes
 	}
 	// MaxActiveBackends defaults to 0 (use all backends)
+
+	// Web dashboard defaults
+	// Note: Disabled by default for security
+	if c.Web.Enabled && c.Web.Listen == "" {
+		c.Web.Listen = "127.0.0.1:8080" // Localhost only by default
+	}
+	if c.Web.RefreshInterval == 0 {
+		c.Web.RefreshInterval = 2 // 2 seconds
+	}
 
 	// Log defaults
 	if c.Log.Level == "" {

@@ -1,292 +1,402 @@
 # SocksBalance Troubleshooting Guide
 
-Common issues and solutions for SocksBalance.
+## Common Issues
 
-## Connection Issues
+### 1. Twitter/Social Media Not Loading Images
 
-### "No healthy backends available"
+**Symptoms**:
+- Twitter feeds load but images don't appear
+- Instagram posts visible but images broken
+- Multi-request web apps fail
 
-**Problem**: All backends are marked as unhealthy.
+**Root Cause**:
+Different backends used for HTML vs images. Social media uses cookies/session tokens that are IP-specific.
 
-**Solutions**:
-1. Check backend connectivity:
-   ```bash
-   curl -x socks5://proxy1.example.com:1080 https://www.google.com
-   ```
-2. Verify backend addresses in `config.yaml`
-3. Check firewall rules allowing outbound connections
-4. Review health check configuration:
-   - Increase `connect_timeout` if backends are slow
-   - Verify `test_url` is accessible from your network
-   - Check if backends support HTTP through SOCKS5
+**Solution**:
+Enable sticky sessions to keep same client on same backend:
 
-**Debug**:
-```bash
-# Check logs for health check failures
-grep "health check" socksbalance.log
-
-# Test backend manually
-telnet proxy1.example.com 1080
+```yaml
+balancer:
+  sticky_session_ttl: 15m  # Increase for longer sessions
 ```
 
-### "Connection timeout" errors
+**Verification**:
+- Check web dashboard - same client should use same backend
+- Clear browser cache and retry
+- Try `sticky_session_ttl: 30m` for longer stability
 
-**Problem**: Connections to SocksBalance timeout.
+---
 
-**Solutions**:
-1. Verify SocksBalance is running:
-   ```bash
-   ps aux | grep socksbalance
-   netstat -tulpn | grep 1080
-   ```
-2. Check listen address in config:
-   - Use `0.0.0.0:1080` for all interfaces
-   - Use `127.0.0.1:1080` for localhost only
-3. Verify firewall allows incoming connections:
-   ```bash
-   sudo iptables -L -n | grep 1080
-   ```
-4. Test connection:
-   ```bash
-   nc -zv localhost 1080
-   ```
+### 2. All Backends Getting Blocked (GFW)
 
-### "SOCKS5 handshake failed"
+**Symptoms**:
+- All connections suddenly fail
+- All backends marked unhealthy at once
+- Complete service outage
 
-**Problem**: Client can't complete SOCKS5 negotiation.
+**Root Cause**:
+GFW detected traffic pattern across all backends simultaneously.
 
-**Solutions**:
-1. Ensure client supports SOCKS5 (not SOCKS4)
-2. Verify no authentication is required (SocksBalance doesn't support auth yet)
-3. Check client SOCKS5 configuration
-4. Test with curl:
-   ```bash
-   curl -v -x socks5://localhost:1080 https://ifconfig.me
-   ```
+**Solution**:
+Limit concurrent backend exposure:
 
-## Performance Issues
+```yaml
+balancer:
+  max_active_backends: 3  # Only expose 3 backends at a time
+```
 
-### Slow connections through proxy
+**How it helps**:
+- Only 3 backends used concurrently
+- If GFW blocks 3, auto-switch to next 3
+- Remaining backends stay as backup
 
-**Problem**: High latency when using SocksBalance.
+**Verification**:
+- Enable web dashboard to watch rotation
+- Should see only top N backends active
+- When backend fails, next fastest automatically used
 
-**Solutions**:
-1. Check backend latencies in logs
-2. Verify `sort_by_latency: true` in config
-3. Reduce `check_interval` for more frequent latency updates:
-   ```yaml
-   health:
-     check_interval: 5s  # From default 10s
-   ```
-4. Use geographically closer backends
-5. Test backend latency directly:
-   ```bash
-   time curl -x socks5://backend:1080 https://www.google.com
-   ```
+---
 
-### High CPU usage
+### 3. Slow Connection Performance
 
-**Problem**: SocksBalance consumes excessive CPU.
+**Symptoms**:
+- High latency
+- Timeouts
+- Sluggish browsing
 
-**Solutions**:
-1. Increase `check_interval` to reduce health check frequency:
-   ```yaml
-   health:
-     check_interval: 30s  # From default 10s
-   ```
-2. Reduce number of concurrent connections
-3. Check for connection leaks in logs
-4. Monitor with:
-   ```bash
-   top -p $(pgrep socksbalance)
-   ```
+**Root Cause**:
+Using slow or overloaded backends.
 
-### Memory leaks
+**Solution**:
+Enable latency filtering:
 
-**Problem**: Memory usage grows over time.
+```yaml
+balancer:
+  max_latency: 1000ms  # Only use backends faster than 1s
+```
 
-**Solutions**:
-1. Update to latest version (may contain fixes)
-2. Monitor goroutines:
-   ```bash
-   # Add pprof endpoint (future feature)
-   # curl http://localhost:6060/debug/pprof/goroutine?debug=1
-   ```
-3. Report issue with logs and memory profile
+**Tuning**:
+- Commercial proxies: `500ms-1000ms`
+- Tor circuits: `2000ms-3000ms`
+- Local SOCKS5: `100ms-500ms`
 
-## Configuration Issues
+**Verification**:
+- Check web dashboard for backend latencies
+- Slow backends should be excluded
+- Only green/yellow latencies should be active
 
-### "Failed to load configuration"
+---
 
-**Problem**: SocksBalance can't parse config file.
+### 4. Connection Refused Errors
 
-**Solutions**:
-1. Validate YAML syntax:
-   ```bash
-   yamllint config.yaml
-   ```
-2. Check file permissions:
-   ```bash
-   ls -l config.yaml
-   chmod 644 config.yaml
-   ```
-3. Verify required fields are present:
-   ```yaml
-   listen: "0.0.0.0:1080"  # Required
-   backends:                # At least one required
-     - address: "..."
-   ```
-4. Review error message for specific field issues
+**Symptoms**:
+```
+connection refused
+dial tcp connect: connection refused
+```
 
-### Backends not being used
+**Possible Causes**:
 
-**Problem**: Traffic only goes to some backends.
+**A. Backend not running**
+- Check backend SOCKS5 servers are started
+- Verify ports are correct: `netstat -tuln | grep <port>`
 
-**Solutions**:
-1. Verify all backends are healthy (check logs)
-2. Ensure round-robin is working (check logs for distribution)
-3. Check if some backends have very high latency
-4. Verify all backend addresses are unique
-5. Review balancer configuration:
-   ```yaml
-   balancer:
-     algorithm: "roundrobin"
-     sort_by_latency: true
-   ```
+**B. Wrong listen address**
+```yaml
+listen: "0.0.0.0:1080"  # Should match your client config
+```
 
-## Health Check Issues
+**C. Firewall blocking**
+- Linux: `sudo iptables -L`
+- Allow port: `sudo ufw allow 1080`
 
-### Backends marked unhealthy incorrectly
+---
 
-**Problem**: Healthy backends show as unhealthy.
+### 5. Health Checks Failing
 
-**Solutions**:
-1. Increase timeouts:
-   ```yaml
-   health:
-     connect_timeout: 10s   # From default 5s
-     request_timeout: 20s   # From default 10s
-   ```
-2. Verify `test_url` is accessible:
-   ```bash
-   curl -x socks5://backend:1080 https://www.google.com
-   ```
-3. Check if backends support HTTP CONNECT
-4. Reduce `failure_threshold`:
-   ```yaml
-   health:
-     failure_threshold: 5  # From default 3
-   ```
+**Symptoms**:
+- All backends marked unhealthy
+- Dashboard shows all red
+- Logs show health check errors
 
-### Health checks too frequent
+**Solution A: Adjust timeouts**
+```yaml
+health:
+  connect_timeout: 10s     # Increase for slow backends
+  request_timeout: 15s     # Increase for slow networks
+  failure_threshold: 5     # More forgiving
+```
 
-**Problem**: Health checks consume too much bandwidth.
+**Solution B: Change test URL**
+```yaml
+health:
+  test_url: "https://httpbin.org/ip"  # Alternative test endpoint
+```
 
-**Solutions**:
-1. Increase `check_interval`:
-   ```yaml
-   health:
-     check_interval: 30s  # From default 10s
-   ```
-2. Use lighter `test_url`:
-   ```yaml
-   health:
-     test_url: "http://captive.apple.com/hotspot-detect.html"
-   ```
+**Solution C: Check backend connectivity**
+```bash
+# Test backend manually
+curl -x socks5://127.0.0.1:9070 https://www.google.com
+```
 
-## Logging and Debugging
+---
 
-### Enable debug logging
+### 6. Web Dashboard Not Accessible
+
+**Symptoms**:
+- Cannot open http://127.0.0.1:8080
+- Connection refused
+- Page not found
+
+**Solution A: Check if enabled**
+```yaml
+web:
+  enabled: true  # Must be explicitly enabled
+```
+
+**Solution B: Check listen address**
+```yaml
+web:
+  listen: "127.0.0.1:8080"  # Localhost only
+  # OR
+  listen: "0.0.0.0:8080"    # All interfaces (less secure)
+```
+
+**Solution C: Port conflict**
+Another service using port 8080:
+```bash
+# Check what's using port 8080
+sudo lsof -i :8080
+
+# Change dashboard port
+web:
+  listen: "127.0.0.1:9090"  # Use different port
+```
+
+**Solution D: Remote access via SSH tunnel**
+```bash
+# From your local machine
+ssh -L 8080:localhost:8080 user@remote-server
+
+# Then access http://localhost:8080 locally
+```
+
+**Verification**:
+- Console should show: `[INFO] Web dashboard started successfully`
+- Check API directly: `curl http://127.0.0.1:8080/api/stats`
+- Check health: `curl http://127.0.0.1:8080/health`
+
+---
+
+### 7. Port Range Expansion Not Working
+
+**Symptoms**:
+- Only 1 backend created instead of range
+- Unexpected backend count
+
+**Solution**:
+Check address format:
+
+```yaml
+# Correct formats
+backends:
+  - address: "127.0.0.1:9070-9089"   # ✅ Creates 20 backends
+  - address: "[::1]:8080-8082"       # ✅ IPv6 range
+
+# Incorrect formats
+  - address: "127.0.0.1:9070:9089"   # ❌ Wrong separator
+  - address: "127.0.0.1:9070 - 9089" # ❌ Spaces
+```
+
+**Verification**:
+- Console shows: `Backends (total after expansion): 20`
+- Web dashboard lists all expanded backends
+
+---
+
+### 8. High Memory Usage
+
+**Symptoms**:
+- Memory constantly increasing
+- OOM (Out of Memory) errors
+
+**Possible Causes**:
+
+**A. Too many backends**
+- Each backend: ~5KB
+- 1000 backends = ~5MB
+- Solution: Use `max_active_backends` to limit concurrent usage
+
+**B. Goroutine leak**
+- Check with: `GODEBUG=gctrace=1 ./socksbalance`
+- Update to latest version
+
+**C. Long-lived connections**
+- Each connection: ~5KB
+- 10,000 connections = ~50MB
+- Normal for high-traffic scenarios
+
+---
+
+### 9. Dashboard Shows Old Data
+
+**Symptoms**:
+- Backend statuses not updating
+- Latencies frozen
+- "Last checked" timestamp old
+
+**Solution A: Check health checker**
+```yaml
+health:
+  check_interval: 10s  # Should be running
+```
+
+**Solution B: Check browser**
+- Hard refresh: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+- Clear cache
+- Try incognito mode
+
+**Solution C: Check API directly**
+```bash
+curl http://127.0.0.1:8080/api/stats
+```
+
+**Solution D: Increase refresh interval**
+```yaml
+web:
+  refresh_interval: 1  # Update every second (was 2)
+```
+
+---
+
+### 10. Transparent Mode Not Working
+
+**Symptoms**:
+- Connections fail
+- "SOCKS5 protocol error" in logs
+
+**Solution**:
+Try SOCKS5 mode instead:
+
+```yaml
+mode: "socks5"  # Full protocol handling
+```
+
+**When to use each mode**:
+- **Transparent** (default): Fastest, works with most backends
+- **SOCKS5**: Better compatibility, slight overhead
+
+---
+
+## Debug Mode
+
+Enable debug logging for detailed troubleshooting:
 
 ```yaml
 log:
-  level: "debug"  # From "info"
-  format: "text"
+  level: "debug"  # Shows all internal operations
 ```
 
-### Common log patterns
-
-**Backend failure**:
+Output:
 ```
-[ERROR] Failed to connect to backend 192.168.1.100:1080: connection refused
-[WARN] Backend 192.168.1.100:1080 marked unhealthy
-```
-
-**Health check failure**:
-```
-[ERROR] Health check failed for 192.168.1.100:1080: timeout
-[INFO] Backend 192.168.1.100:1080 failure count: 1/3
+[DEBUG] Backend 127.0.0.1:9070 latency: 45ms
+[DEBUG] Health check passed: 127.0.0.1:9070
+[DEBUG] Selected backend: 127.0.0.1:9070 (latency: 45ms)
+[DEBUG] Client 192.168.1.100 → Backend 127.0.0.1:9070 (cached)
 ```
 
-**Successful routing**:
+---
+
+## Performance Tuning
+
+### For Maximum Speed
+```yaml
+mode: "transparent"              # Zero-copy mode
+balancer:
+  max_latency: 500ms             # Only fast backends
+  sticky_session_ttl: 5m         # Short sessions
+  max_active_backends: 0         # Use all (no limit)
+health:
+  check_interval: 30s            # Less frequent checks
 ```
-[INFO] New SOCKS5 connection from 192.168.1.50:54321
-[INFO] Routing 192.168.1.50:54321 through backend 192.168.1.100:1080 to example.com:443
-[INFO] Backend handshake successful, relaying data
+
+### For Maximum Stability
+```yaml
+mode: "socks5"                   # Full protocol
+balancer:
+  max_latency: 3000ms            # Forgiving threshold
+  sticky_session_ttl: 30m        # Long sessions
+  max_active_backends: 5         # Moderate rotation
+health:
+  check_interval: 10s            # Frequent checks
+  failure_threshold: 5           # Forgiving
 ```
 
-### Collecting diagnostics
+### For GFW Evasion
+```yaml
+mode: "transparent"
+balancer:
+  max_latency: 2000ms
+  sticky_session_ttl: 20m
+  max_active_backends: 3         # Critical: limit exposure
+web:
+  enabled: true                  # Monitor rotation
+```
 
-When reporting issues, include:
-
-1. **Configuration**:
-   ```bash
-   cat config.yaml
-   ```
-
-2. **Version**:
-   ```bash
-   socksbalance -version
-   ```
-
-3. **Logs** (last 100 lines):
-   ```bash
-   tail -n 100 socksbalance.log
-   ```
-
-4. **System info**:
-   ```bash
-   uname -a
-   go version
-   ```
-
-5. **Network test**:
-   ```bash
-   # Test backend directly
-   curl -x socks5://backend:1080 https://ifconfig.me
-   
-   # Test through SocksBalance
-   curl -x socks5://localhost:1080 https://ifconfig.me
-   ```
+---
 
 ## Getting Help
 
-If issues persist:
+1. **Check logs**: Set `log.level: "debug"` for detailed output
+2. **Check dashboard**: Visual confirmation of backend status
+3. **Test manually**: Use `curl -x socks5://...` to test backends
+4. **Check issues**: [GitHub Issues](https://github.com/RevEngine3r/SocksBalance/issues)
+5. **Report bugs**: Include config, logs, and dashboard screenshot
 
-1. Check [Issues](https://github.com/RevEngine3r/SocksBalance/issues) for similar problems
-2. Open new issue with:
-   - SocksBalance version
-   - Configuration file (remove sensitive data)
-   - Relevant log output
-   - Steps to reproduce
-3. Join discussions in [Discussions](https://github.com/RevEngine3r/SocksBalance/discussions)
+---
 
-## Known Issues
+## Useful Commands
 
-### Authentication not supported
+### Test Backend Connectivity
+```bash
+# Test single backend
+curl -x socks5://127.0.0.1:9070 https://api.ipify.org
 
-SocksBalance currently only supports NO_AUTH SOCKS5. Backend servers requiring username/password authentication are not supported.
+# Test SocksBalance
+curl -x socks5://127.0.0.1:1080 https://api.ipify.org
 
-**Workaround**: Use backends without authentication or use pre-authenticated tunnels.
+# Check backend latency
+time curl -x socks5://127.0.0.1:9070 https://www.google.com > /dev/null
+```
 
-### IPv6 support
+### Monitor in Real-Time
+```bash
+# Watch logs
+tail -f /var/log/socksbalance.log
 
-IPv6 addresses are parsed but may not work correctly in all scenarios.
+# Watch dashboard API
+watch -n 2 'curl -s http://127.0.0.1:8080/api/stats | jq .'
 
-**Workaround**: Use IPv4 addresses for backends and listen address.
+# Monitor connections
+watch -n 1 'netstat -an | grep 1080'
+```
 
-### Hot reload not implemented
+### Check Ports
+```bash
+# What's listening
+sudo netstat -tulpn | grep socksbalance
 
-Changing configuration requires restart.
+# What's using port 8080
+sudo lsof -i :8080
 
-**Workaround**: Plan maintenance windows for config updates.
+# Kill process on port
+sudo kill $(sudo lsof -t -i:8080)
+```
+
+---
+
+**Still having issues?** Open an issue on [GitHub](https://github.com/RevEngine3r/SocksBalance/issues) with:
+- Your `config.yaml`
+- Logs with `log.level: "debug"`
+- Screenshot of web dashboard
+- Steps to reproduce
