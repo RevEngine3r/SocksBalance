@@ -61,15 +61,26 @@
   - Integrated with main.go for automatic health monitoring
   - Tests: 9 test cases covering lifecycle, connection testing, periodic checks
 
+- ✅ **STEP7: Load Balancer** (2026-01-28)
+  - Created `internal/balancer/balancer.go` with round-robin algorithm
+  - Implemented latency-based backend sorting for optimal selection
+  - Added thread-safe backend selection using atomic counter
+  - Replaced hardcoded backend[0] with intelligent balancer.Next()
+  - Updated `internal/proxy/server.go` to use balancer
+  - Updated `cmd/socksbalance/main.go` to initialize balancer
+  - Wrote comprehensive unit tests covering all scenarios
+  - Tests: 8 test cases (no backends, unhealthy, single, round-robin, latency, mixed health, concurrent)
+
 ## Current Step
-**STEP7: Load Balancer** ([details](./ROAD_MAP/core-infrastructure/STEP7_load_balancer.md))
+**STEP8: Integration Testing & Polish** ([details](./ROAD_MAP/core-infrastructure/STEP8_integration.md))
 
 ### Plan
-1. Create `internal/balancer/roundrobin.go` for round-robin selection
-2. Implement latency-based sorting integration
-3. Add balancer to server for backend selection
-4. Replace hardcoded backend[0] with balancer.Next()
-5. Write unit tests for load balancing logic
+1. Create integration test suite with real SOCKS5 proxies
+2. Test end-to-end connection flow
+3. Verify load balancing distribution
+4. Test failover scenarios
+5. Add logging improvements
+6. Update documentation with examples
 
 ### Status
 ⏳ Ready to implement
@@ -77,5 +88,6 @@
 ---
 
 ## Next Steps
-- STEP7: Load Balancer (Round-Robin with Latency Sorting)
 - STEP8: Integration Testing & Polish
+- Future: Metrics & Monitoring
+- Future: Advanced Load Balancing Algorithms
