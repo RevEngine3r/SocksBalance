@@ -43,7 +43,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Register routes
 	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/api/stats", s.handleStats)
+	mux.HandleFunc("/api/stats", s.handleStatsReal) // Use real implementation
 	mux.HandleFunc("/", s.handleIndex)
 
 	s.httpSrv = &http.Server{
@@ -61,7 +61,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if err := s.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("[WEB] HTTP server error: %v", err)
 		}
-	}():
+	}()
 
 	log.Printf("[WEB] Server started on %s", s.addr)
 	return nil
@@ -103,24 +103,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleStats returns backend statistics (placeholder for STEP2)
-func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	// Placeholder response - will be implemented in STEP2
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Stats endpoint - to be implemented in STEP2",
-		"timestamp": time.Now().Format(time.RFC3339),
-	})
-}
-
 // handleIndex serves the dashboard UI (placeholder for STEP3)
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
-	// Placeholder HTML - will be implemented in STEP3
+	// Placeholder HTML - will be replaced in STEP3
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head>

@@ -2,7 +2,62 @@
 
 ## Active Feature: Web UI Dashboard
 
-### Current Step: STEP1 - HTTP Server Foundation
+### Current Step: STEP2 - JSON API Endpoint
+**Status**: ✅ Completed  
+**Completed**: 2026-01-28
+
+#### Implemented
+- ✅ Created `internal/web/stats.go` with data structures
+- ✅ BackendStats struct (address, name, healthy, latency_ms, last_checked)
+- ✅ StatsResponse struct (timestamp, counts, backends array)
+- ✅ Real `/api/stats` handler fetching pool data
+- ✅ Sorting by latency (fastest first, unhealthy last)
+- ✅ CORS headers for development
+- ✅ OPTIONS request handling (preflight)
+- ✅ Comprehensive unit tests (8 test cases)
+
+#### Changes Summary
+**New Files**:
+- `internal/web/stats.go` - Statistics logic (94 lines)
+- `internal/web/stats_test.go` - Unit tests (223 lines)
+
+**Modified Files**:
+- `internal/web/server.go` - Updated to use real stats handler
+
+**Test Results**:
+- ✅ Empty pool response
+- ✅ Single backend serialization
+- ✅ Multiple backends sorting (by latency)
+- ✅ Unhealthy backends go last
+- ✅ CORS headers present
+- ✅ OPTIONS preflight handling
+- ✅ Timestamp validation (RFC3339 format)
+- ✅ Healthy/total counts accurate
+
+**Sample JSON Output**:
+```json
+{
+  "timestamp": "2026-01-28T21:30:00+03:30",
+  "total_backends": 3,
+  "healthy_backends": 2,
+  "backends": [
+    {
+      "address": "127.0.0.1:9070",
+      "name": "Tor-1",
+      "healthy": true,
+      "latency_ms": 45,
+      "last_checked": "2026-01-28T21:29:55+03:30"
+    }
+  ]
+}
+```
+
+#### Next Step
+**STEP3: Dashboard HTML/CSS** - Create beautiful, responsive UI
+
+---
+
+### Completed: STEP1 - HTTP Server Foundation
 **Status**: ✅ Completed  
 **Completed**: 2026-01-28
 
@@ -14,23 +69,6 @@
 - ✅ Graceful shutdown with 5-second timeout
 - ✅ Thread-safe server state management
 - ✅ Proper HTTP timeouts (read, write, idle)
-
-#### Changes Summary
-**New Files**:
-- `internal/web/server.go` - HTTP server implementation (122 lines)
-- `internal/web/server_test.go` - Comprehensive unit tests (210 lines)
-
-**Test Results**:
-- ✅ Server lifecycle (start/stop)
-- ✅ Double start prevention
-- ✅ Health endpoint returns {"status":"ok"}
-- ✅ Stats endpoint (placeholder)
-- ✅ Index endpoint (placeholder HTML)
-- ✅ Graceful shutdown within timeout
-- ✅ No goroutine leaks
-
-#### Next Step
-**STEP2: JSON API Endpoint** - Implement `/api/stats` handler with real backend data
 
 ---
 
@@ -83,44 +121,6 @@ balancer:
 ✅ **Best Performance**: Always using fastest available backends  
 ✅ **Reserve Pool**: 17 backends ready as backup  
 
-### Example Scenarios
-
-**Scenario 1: 20 Tor Circuits, Use Top 3**
-```yaml
-backends:
-  - address: "127.0.0.1:9070-9089"  # 20 Tor instances
-    name: "Tor"
-
-balancer:
-  max_active_backends: 3  # Only expose 3 to GFW
-```
-
-**Scenario 2: 100 Proxies, Use Top 5**
-```yaml
-backends:
-  - address: "proxy.example.com:10000-10099"  # 100 proxies
-    name: "Proxy Farm"
-
-balancer:
-  max_active_backends: 5  # Only use 5 fastest
-```
-
-**Scenario 3: Unlimited (Use All)**
-```yaml
-balancer:
-  max_active_backends: 0  # Use all available backends (default)
-```
-
-### Real-Time Adaptation
-
-Backend pool gets automatically re-sorted every 10 seconds:
-
-```
-Time 0:00 - Using: Backend#1 (50ms), Backend#5 (100ms), Backend#8 (150ms)
-Time 0:10 - Backend#5 fails, now using: Backend#1, Backend#8, Backend#12 (200ms)
-Time 0:20 - Backend#3 now faster (80ms), using: Backend#1, Backend#3, Backend#8
-```
-
 ## Complete Feature Set
 
 ### Version History
@@ -131,54 +131,6 @@ Time 0:20 - Backend#3 now faster (80ms), using: Backend#1, Backend#3, Backend#8
 - **v0.4.0** - Latency filtering + Sticky sessions
 - **v0.5.0** - GFW evasion (max active backends)
 - **v0.6.0** - Web UI Dashboard (IN PROGRESS)
-
-### Anti-GFW Stack
-
-```yaml
-balancer:
-  # Layer 1: Only use fast backends
-  max_latency: 1000ms
-  
-  # Layer 2: Keep clients on same backend (avoid pattern)
-  sticky_session_ttl: 10m
-  
-  # Layer 3: Limit concurrent exposure (GFW evasion)
-  max_active_backends: 3
-```
-
-### Recommended Settings
-
-**For Tor (Anti-GFW)**:
-```yaml
-backends:
-  - address: "127.0.0.1:9070-9089"  # 20 circuits
-    name: "Tor"
-
-balancer:
-  max_latency: 3000ms         # Tor is slower
-  sticky_session_ttl: 30m     # Long sessions for circuit stability
-  max_active_backends: 3      # Only expose 3 circuits to GFW
-```
-
-**For Commercial Proxies**:
-```yaml
-backends:
-  - address: "proxy.example.com:10000-10099"  # 100 proxies
-    name: "Proxies"
-
-balancer:
-  max_latency: 500ms          # Fast commercial proxies
-  sticky_session_ttl: 10m     # Medium sessions
-  max_active_backends: 5      # Rotate through top 5
-```
-
-**For Maximum Performance (No GFW)**:
-```yaml
-balancer:
-  max_latency: 1000ms         # Moderate filtering
-  sticky_session_ttl: 5m      # Short sessions
-  max_active_backends: 0      # Use all backends (no limit)
-```
 
 ## Completed Features
 
@@ -194,13 +146,14 @@ balancer:
 - ✅ **STEP10**: Port Range Expansion
 - ✅ **STEP11**: Latency Filtering + Sticky Sessions
 - ✅ **STEP12**: GFW Evasion (Max Active Backends)
-- ✅ **WEB-STEP1**: HTTP Server Foundation (NEW)
+- ✅ **WEB-STEP1**: HTTP Server Foundation
+- ✅ **WEB-STEP2**: JSON API Endpoint (NEW)
 
 ## Project Metrics
 
-- **Total Development Time**: ~12 hours
-- **Lines of Code**: ~5,000+
-- **Test Coverage**: 80+ unit tests, 4 integration tests
+- **Total Development Time**: ~13 hours
+- **Lines of Code**: ~5,400+
+- **Test Coverage**: 88+ unit tests, 4 integration tests
 - **Dependencies**: Minimal (Go stdlib + yaml + x/net)
 - **Performance**: < 0.1ms routing overhead (transparent mode)
 - **Scalability**: Tested with 1000+ backends
@@ -213,6 +166,6 @@ balancer:
 
 **Current Progress**:
 - ✅ **HTTP Server**: Foundation complete with lifecycle management
-- ⏳ **JSON API**: Next - implement real backend data endpoint
-- ⏳ **Dashboard UI**: Upcoming - modern HTML/CSS interface
+- ✅ **JSON API**: Real backend data endpoint with sorting (NEW)
+- ⏳ **Dashboard UI**: Next - modern HTML/CSS interface
 - ⏳ **AJAX Updates**: Upcoming - real-time auto-refresh
