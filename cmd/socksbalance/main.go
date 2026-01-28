@@ -10,6 +10,7 @@ import (
 
 	"github.com/RevEngine3r/SocksBalance/internal/backend"
 	"github.com/RevEngine3r/SocksBalance/internal/config"
+	"github.com/RevEngine3r/SocksBalance/internal/health"
 	"github.com/RevEngine3r/SocksBalance/internal/proxy"
 )
 
@@ -50,6 +51,9 @@ func main() {
 		}
 	}
 	fmt.Printf("  Health Check Interval: %v\n", cfg.Health.CheckInterval)
+	if cfg.Health.TestURL != "" {
+		fmt.Printf("  Test URL: %s\n", cfg.Health.TestURL)
+	}
 	fmt.Printf("  Load Balancer: %s\n", cfg.Balancer.Algorithm)
 	fmt.Printf("  Log Level: %s\n", cfg.Log.Level)
 
@@ -61,13 +65,26 @@ func main() {
 		fmt.Printf("[INFO] Added backend: %s\n", b.Address)
 	}
 
-	fmt.Println("[TODO] Start health checker")
-
-	fmt.Printf("[INFO] Starting TCP proxy server on %s...\n", cfg.Listen)
-	server := proxy.New(cfg.Listen, pool)
+	fmt.Println("[INFO] Starting health checker...")
+	healthChecker := health.New(
+		pool,
+		cfg.Health.ConnectTimeout,
+		cfg.Health.TestURL,
+		cfg.Health.CheckInterval,
+		cfg.Health.RequestTimeout,
+		cfg.Health.FailureThreshold,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if err := healthChecker.Start(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] Failed to start health checker: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("[INFO] Starting SOCKS5 proxy server on %s...\n", cfg.Listen)
+	server := proxy.New(cfg.Listen, pool)
 
 	if err := server.Start(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] Failed to start server: %v\n", err)
@@ -84,6 +101,10 @@ func main() {
 	fmt.Println("\n[INFO] Shutdown signal received...")
 
 	cancel()
+
+	if err := healthChecker.Stop(); err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Failed to stop health checker: %v\n", err)
+	}
 
 	if err := server.Stop(); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] Failed to stop server gracefully: %v\n", err)
