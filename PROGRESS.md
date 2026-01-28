@@ -49,16 +49,27 @@
   - Wrote comprehensive unit tests with mock connections
   - Tests: 7 test cases covering IPv4, domain, invalid versions, unsupported commands
 
+- ✅ **STEP6: Health Checker** (2026-01-28)
+  - Created `internal/health/checker.go` for periodic backend health monitoring
+  - Implemented connection testing (TCP dial test)
+  - Added latency measurement via HTTP requests through SOCKS5 proxy
+  - Integrated with backend pool for health status updates
+  - Configurable check interval, timeouts, and failure thresholds
+  - Concurrent health checks for all backends
+  - Graceful start/stop with context cancellation
+  - Added golang.org/x/net dependency for SOCKS5 dialer
+  - Integrated with main.go for automatic health monitoring
+  - Tests: 9 test cases covering lifecycle, connection testing, periodic checks
+
 ## Current Step
-**STEP6: Health Checker** ([details](./ROAD_MAP/core-infrastructure/STEP6_health_checker.md))
+**STEP7: Load Balancer** ([details](./ROAD_MAP/core-infrastructure/STEP7_load_balancer.md))
 
 ### Plan
-1. Create `internal/health/checker.go` for periodic health checks
-2. Implement connection test to each backend
-3. Add URL latency measurement via backend proxy
-4. Update backend health status and latency
-5. Run checks on configurable interval
-6. Write unit tests for health checker
+1. Create `internal/balancer/roundrobin.go` for round-robin selection
+2. Implement latency-based sorting integration
+3. Add balancer to server for backend selection
+4. Replace hardcoded backend[0] with balancer.Next()
+5. Write unit tests for load balancing logic
 
 ### Status
 ⏳ Ready to implement
@@ -66,6 +77,5 @@
 ---
 
 ## Next Steps
-- STEP6: Health Checker
 - STEP7: Load Balancer (Round-Robin with Latency Sorting)
-- STEP8: Integration & Polish
+- STEP8: Integration Testing & Polish
