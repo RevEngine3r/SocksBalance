@@ -2,7 +2,73 @@
 
 ## Active Feature: Web UI Dashboard
 
-### Current Step: STEP3 - Dashboard HTML/CSS
+### Current Step: STEP4 - AJAX Auto-Update
+**Status**: ✅ Completed  
+**Completed**: 2026-01-28
+
+#### Implemented
+- ✅ JavaScript fetch() API for /api/stats
+- ✅ Auto-refresh every 2 seconds with setInterval
+- ✅ Dynamic table population from JSON
+- ✅ Color-coded latency thresholds:
+  - Green: < 100ms (fast)
+  - Yellow: 100-500ms (medium)
+  - Red: ≥ 500ms (slow)
+- ✅ Status badges with visual icons (✓/✗)
+- ✅ Summary stats auto-update (total/healthy/unhealthy)
+- ✅ Last updated timestamp with formatting
+- ✅ Relative time display ("Just now", "5s ago", etc.)
+- ✅ Error handling with retry logic
+- ✅ Empty state handling (no backends)
+- ✅ Graceful cleanup on page unload
+
+#### Changes Summary
+**Modified Files**:
+- `internal/web/dashboard.go` - Added complete JavaScript implementation
+
+**JavaScript Features**:
+- **Auto-refresh**: 2-second interval
+- **Smart formatting**:
+  - Latency: Color-coded with class names
+  - Timestamps: Human-readable format
+  - Relative time: "Just now", "5s ago", "2m ago"
+- **Error handling**: Displays error message, continues retrying
+- **Edge cases**: Empty backend list, zero latency, missing data
+- **Memory management**: Timer cleanup on unload
+
+**Data Flow**:
+```
+setInterval (2s)
+  ↓
+fetch('/api/stats')
+  ↓
+Parse JSON
+  ↓
+Update Stats Cards (total, healthy, unhealthy)
+  ↓
+Build Table HTML
+  ├─ Status Badge (colored)
+  ├─ Backend Name
+  ├─ Address (monospace)
+  ├─ Latency (color-coded)
+  └─ Last Check (relative time)
+  ↓
+Inject into DOM
+  ↓
+Update "Last Updated" timestamp
+```
+
+**Error States**:
+- Network failure: Shows error message, retries automatically
+- Empty data: Shows "No backends configured"
+- Invalid JSON: Caught by error handler
+
+#### Next Step
+**STEP5: Integration & Configuration** - Add web config to YAML and integrate with main.go
+
+---
+
+### Completed: STEP3 - Dashboard HTML/CSS
 **Status**: ✅ Completed  
 **Completed**: 2026-01-28
 
@@ -11,58 +77,10 @@
 - ✅ Modern dark theme (#1a1a2e background with gradients)
 - ✅ Responsive card-based layout
 - ✅ Header with gradient title and summary stats
-- ✅ Color-coded latency indicators:
-  - Green (< 100ms) - Fast
-  - Yellow (100-500ms) - Medium
-  - Red (≥ 500ms) - Slow
+- ✅ Color-coded latency indicators
 - ✅ Status badges with visual icons
 - ✅ Glassmorphism effects (backdrop-filter)
 - ✅ Mobile-responsive design (3 breakpoints)
-- ✅ Loading state indicator
-- ✅ Table structure ready for data
-- ✅ Smooth hover transitions
-
-#### Changes Summary
-**New Files**:
-- `internal/web/dashboard.go` - HTML/CSS dashboard (280 lines)
-
-**Modified Files**:
-- `internal/web/server.go` - Updated to serve real dashboard
-
-**Design Features**:
-- **Color Palette**:
-  - Background: #0f0f1e → #1a1a2e gradient
-  - Primary: #667eea → #764ba2 gradient
-  - Success: #48bb78 (green)
-  - Warning: #ecc94b (yellow)
-  - Error: #f56565 (red)
-- **Typography**: System fonts for performance
-- **Shadows**: Multiple depth layers for 3D effect
-- **Borders**: Semi-transparent for glass effect
-- **Animations**: Smooth transitions on hover
-
-**Layout Structure**:
-```
-Header (Glassmorphic card)
-  ├─ Title with gradient
-  ├─ Subtitle
-  └─ Stats Summary (3 cards: Total, Healthy, Unhealthy)
-
-Main Card (Glassmorphic)
-  └─ Content Area
-      └─ Loading indicator (placeholder for table)
-
-Footer
-  └─ Last updated timestamp
-```
-
-**Responsive Breakpoints**:
-- Desktop: > 768px (full layout)
-- Tablet: 480-768px (condensed)
-- Mobile: < 480px (stacked)
-
-#### Next Step
-**STEP4: AJAX Auto-Update** - Connect UI to API with real-time updates
 
 ---
 
@@ -72,12 +90,9 @@ Footer
 
 #### Implemented
 - ✅ Created `internal/web/stats.go` with data structures
-- ✅ BackendStats struct (address, name, healthy, latency_ms, last_checked)
-- ✅ StatsResponse struct (timestamp, counts, backends array)
 - ✅ Real `/api/stats` handler fetching pool data
 - ✅ Sorting by latency (fastest first, unhealthy last)
 - ✅ CORS headers for development
-- ✅ OPTIONS request handling (preflight)
 - ✅ Comprehensive unit tests (8 test cases)
 
 ---
@@ -92,8 +107,6 @@ Footer
 - ✅ Added basic routes (/, /api/stats, /health)
 - ✅ Comprehensive unit tests (10 test cases)
 - ✅ Graceful shutdown with 5-second timeout
-- ✅ Thread-safe server state management
-- ✅ Proper HTTP timeouts (read, write, idle)
 
 ---
 
@@ -130,18 +143,19 @@ Added **`max_active_backends`** option to limit concurrent backend usage for ant
 - ✅ **STEP12**: GFW Evasion (Max Active Backends)
 - ✅ **WEB-STEP1**: HTTP Server Foundation
 - ✅ **WEB-STEP2**: JSON API Endpoint
-- ✅ **WEB-STEP3**: Dashboard HTML/CSS (NEW)
+- ✅ **WEB-STEP3**: Dashboard HTML/CSS
+- ✅ **WEB-STEP4**: AJAX Auto-Update (NEW)
 
 ## Project Metrics
 
-- **Total Development Time**: ~13.5 hours
-- **Lines of Code**: ~5,700+
+- **Total Development Time**: ~14 hours
+- **Lines of Code**: ~6,100+
 - **Test Coverage**: 88+ unit tests, 4 integration tests
 - **Dependencies**: Minimal (Go stdlib + yaml + x/net)
 - **Performance**: < 0.1ms routing overhead (transparent mode)
 - **Scalability**: Tested with 1000+ backends
 - **GFW Evasion**: Backend exposure limiting
-- **Monitoring**: Web dashboard (in progress)
+- **Monitoring**: Web dashboard with real-time updates
 
 ## Status Summary
 
@@ -150,5 +164,6 @@ Added **`max_active_backends`** option to limit concurrent backend usage for ant
 **Current Progress**:
 - ✅ **HTTP Server**: Foundation complete with lifecycle management
 - ✅ **JSON API**: Real backend data endpoint with sorting
-- ✅ **Dashboard UI**: Modern dark theme with responsive design (NEW)
-- ⏳ **AJAX Updates**: Next - real-time auto-refresh implementation
+- ✅ **Dashboard UI**: Modern dark theme with responsive design
+- ✅ **AJAX Updates**: Real-time auto-refresh every 2 seconds (NEW)
+- ⏳ **Integration**: Next - add config and wire up with main.go

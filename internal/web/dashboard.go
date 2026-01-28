@@ -67,6 +67,11 @@ const dashboardHTML = `<!DOCTYPE html>
             min-width: 150px;
             text-align: center;
             border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
         }
 
         .stat-value {
@@ -111,6 +116,15 @@ const dashboardHTML = `<!DOCTYPE html>
             0%, 20% { content: '.'; }
             40% { content: '..'; }
             60%, 100% { content: '...'; }
+        }
+
+        .error {
+            text-align: center;
+            padding: 40px;
+            color: #f56565;
+            background: rgba(245, 101, 101, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(245, 101, 101, 0.3);
         }
 
         table {
@@ -253,18 +267,116 @@ const dashboardHTML = `<!DOCTYPE html>
     </div>
 
     <script>
-        // Placeholder for AJAX - will be implemented in STEP4
+        const REFRESH_INTERVAL = 2000; // 2 seconds
+        let refreshTimer = null;
+
+        function formatLatency(latencyMs) {
+            if (latencyMs === 0) {
+                return '<span class="latency unknown">-</span>';
+            }
+            
+            let className = 'unknown';
+            if (latencyMs < 100) className = 'fast';
+            else if (latencyMs < 500) className = 'medium';
+            else className = 'slow';
+            
+            return '<span class="latency ' + className + '">' + latencyMs + ' ms</span>';
+        }
+
+        function formatTimestamp(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            return date.toLocaleTimeString();
+        }
+
+        function formatRelativeTime(isoString) {
+            if (!isoString) return 'Never';
+            const date = new Date(isoString);
+            const now = new Date();
+            const diffSeconds = Math.floor((now - date) / 1000);
+            
+            if (diffSeconds < 10) return 'Just now';
+            if (diffSeconds < 60) return diffSeconds + 's ago';
+            if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + 'm ago';
+            return Math.floor(diffSeconds / 3600) + 'h ago';
+        }
+
         function updateDashboard() {
-            document.getElementById('content').innerHTML = `
-                <div class="no-data">
-                    <p>AJAX auto-update will be implemented in STEP4</p>
-                    <p style="margin-top: 10px;">Try <a href="/api/stats" style="color: #667eea;">viewing the API directly</a></p>
-                </div>
-            `;
+            fetch('/api/stats')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Update summary stats
+                    document.getElementById('total-backends').textContent = data.total_backends;
+                    document.getElementById('healthy-backends').textContent = data.healthy_backends;
+                    document.getElementById('unhealthy-backends').textContent = 
+                        data.total_backends - data.healthy_backends;
+
+                    // Update content
+                    const content = document.getElementById('content');
+                    
+                    if (data.backends.length === 0) {
+                        content.innerHTML = '<div class="no-data">No backends configured</div>';
+                    } else {
+                        let tableHTML = '<table>';
+                        tableHTML += '<thead><tr>';
+                        tableHTML += '<th>Status</th>';
+                        tableHTML += '<th>Name</th>';
+                        tableHTML += '<th>Address</th>';
+                        tableHTML += '<th>Latency</th>';
+                        tableHTML += '<th>Last Check</th>';
+                        tableHTML += '</tr></thead>';
+                        tableHTML += '<tbody>';
+                        
+                        data.backends.forEach(backend => {
+                            const statusClass = backend.healthy ? 'healthy' : 'unhealthy';
+                            const statusIcon = backend.healthy ? '✓' : '✗';
+                            const statusText = backend.healthy ? 'Healthy' : 'Unhealthy';
+                            
+                            tableHTML += '<tr>';
+                            tableHTML += '<td><span class="status-badge ' + statusClass + '">';
+                            tableHTML += statusIcon + ' ' + statusText + '</span></td>';
+                            tableHTML += '<td><span class="backend-name">' + 
+                                (backend.name || '-') + '</span></td>';
+                            tableHTML += '<td><span class="backend-address">' + 
+                                backend.address + '</span></td>';
+                            tableHTML += '<td>' + formatLatency(backend.latency_ms) + '</td>';
+                            tableHTML += '<td>' + formatRelativeTime(backend.last_checked) + '</td>';
+                            tableHTML += '</tr>';
+                        });
+                        
+                        tableHTML += '</tbody></table>';
+                        content.innerHTML = tableHTML;
+                    }
+
+                    // Update last updated timestamp
+                    document.getElementById('last-updated').textContent = 
+                        'Last updated: ' + formatTimestamp(data.timestamp);
+                })
+                .catch(error => {
+                    console.error('Failed to fetch stats:', error);
+                    const content = document.getElementById('content');
+                    content.innerHTML = '<div class="error">⚠️ Failed to load data: ' + 
+                        error.message + '<br>Retrying...</div>';
+                });
         }
 
         // Initial load
-        setTimeout(updateDashboard, 1000);
+        updateDashboard();
+
+        // Auto-refresh every 2 seconds
+        refreshTimer = setInterval(updateDashboard, REFRESH_INTERVAL);
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+        });
     </script>
 </body>
 </html>
