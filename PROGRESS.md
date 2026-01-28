@@ -11,15 +11,24 @@
   - Wrote detailed `README.md` with architecture and usage
   - Added MIT `LICENSE`
 
+- ✅ **STEP2: Configuration System** (2026-01-28)
+  - Created `internal/config/config.go` with type-safe structs
+  - Implemented YAML loading with `gopkg.in/yaml.v3`
+  - Added validation for required fields and value ranges
+  - Implemented default values for optional fields
+  - Wrote comprehensive unit tests in `config_test.go`
+  - Updated `main.go` to load and display configuration
+  - Tests: 11 test cases covering valid configs, defaults, and error cases
+
 ## Current Step
-**STEP2: Configuration System** ([details](./ROAD_MAP/core-infrastructure/STEP2_config_system.md))
+**STEP3: Backend Representation** ([details](./ROAD_MAP/core-infrastructure/STEP3_backend_representation.md))
 
 ### Plan
-1. Create `internal/config/config.go` with structs matching YAML schema
-2. Implement YAML loading with validation
-3. Add default values and error handling
-4. Write unit tests for config parsing
-5. Update `main.go` to load and validate configuration
+1. Create `internal/backend/backend.go` with Backend struct
+2. Add health status tracking (healthy/unhealthy, latency)
+3. Implement connection test functionality
+4. Add thread-safe state management
+5. Write unit tests for backend operations
 
 ### Status
 ⏳ Ready to implement
@@ -27,7 +36,8 @@
 ---
 
 ## Next Steps
-- STEP2: Configuration System
 - STEP3: Backend Representation
 - STEP4: TCP Proxy Server
 - STEP5: Connection Handler
+- STEP6: Health Checker
+- STEP7: Load Balancer
