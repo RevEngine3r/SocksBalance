@@ -1,6 +1,7 @@
 package balancer
 
 import (
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -11,28 +12,30 @@ import (
 
 // Balancer distributes connections across backends using round-robin
 type Balancer struct {
-	pool             *backend.Pool
-	counter          uint32
-	maxLatency       time.Duration
-	stickySessionTTL time.Duration
-	stickySessions   map[string]*stickySession
-	mu               sync.RWMutex
+	pool              *backend.Pool
+	counter           uint32
+	maxLatency        time.Duration
+	stickySessionTTL  time.Duration
+	maxActiveBackends int
+	stickySessions    map[string]*stickySession
+	mu                sync.RWMutex
 }
 
 // stickySession tracks client IP to backend mapping
 type stickySession struct {
-	backend   *backend.Backend
-	expiry    time.Time
+	backend *backend.Backend
+	expiry  time.Time
 }
 
 // New creates a new load balancer
-func New(pool *backend.Pool, maxLatency, stickySessionTTL time.Duration) *Balancer {
+func New(pool *backend.Pool, maxLatency, stickySessionTTL time.Duration, maxActiveBackends int) *Balancer {
 	b := &Balancer{
-		pool:             pool,
-		counter:          0,
-		maxLatency:       maxLatency,
-		stickySessionTTL: stickySessionTTL,
-		stickySessions:   make(map[string]*stickySession),
+		pool:              pool,
+		counter:           0,
+		maxLatency:        maxLatency,
+		stickySessionTTL:  stickySessionTTL,
+		maxActiveBackends: maxActiveBackends,
+		stickySessions:    make(map[string]*stickySession),
 	}
 
 	// Start cleanup goroutine for expired sessions
@@ -92,6 +95,12 @@ func (b *Balancer) Next(clientAddr string) *backend.Backend {
 		if len(filtered) > 0 {
 			backends = filtered
 		}
+	}
+
+	// Limit to top N fastest backends (anti-GFW detection)
+	if b.maxActiveBackends > 0 && len(backends) > b.maxActiveBackends {
+		log.Printf("[DEBUG] Limiting to top %d fastest backends (out of %d available)", b.maxActiveBackends, len(backends))
+		backends = backends[:b.maxActiveBackends]
 	}
 
 	if len(backends) == 0 {

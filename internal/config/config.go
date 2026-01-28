@@ -40,6 +40,7 @@ type BalancerConfig struct {
 	Algorithm         string        `yaml:"algorithm"`
 	MaxLatency        time.Duration `yaml:"max_latency"`         // Only use backends with latency <= this value (0 = no limit)
 	StickySessionTTL  time.Duration `yaml:"sticky_session_ttl"`  // How long to keep client -> backend mapping (0 = disabled)
+	MaxActiveBackends int           `yaml:"max_active_backends"` // Maximum number of backends to use concurrently (0 = use all)
 }
 
 // LogConfig represents logging settings
@@ -90,6 +91,10 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.Balancer.MaxActiveBackends < 0 {
+		return fmt.Errorf("max_active_backends cannot be negative")
+	}
+
 	return nil
 }
 
@@ -127,6 +132,7 @@ func (c *Config) SetDefaults() {
 	if c.Balancer.StickySessionTTL == 0 {
 		c.Balancer.StickySessionTTL = 5 * time.Minute // Default 5 minutes
 	}
+	// MaxActiveBackends defaults to 0 (use all backends)
 
 	// Log defaults
 	if c.Log.Level == "" {
