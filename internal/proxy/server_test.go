@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/RevEngine3r/SocksBalance/internal/backend"
+	"github.com/RevEngine3r/SocksBalance/internal/balancer"
 )
 
 func TestNew(t *testing.T) {
 	pool := backend.NewPool()
-	server := New("127.0.0.1:0", pool)
+	bal := balancer.New(pool)
+	server := New("127.0.0.1:0", bal)
 
 	if server == nil {
 		t.Fatal("Expected non-nil server")
@@ -27,7 +29,8 @@ func TestNew(t *testing.T) {
 
 func TestStartStop(t *testing.T) {
 	pool := backend.NewPool()
-	server := New("127.0.0.1:0", pool)
+	bal := balancer.New(pool)
+	server := New("127.0.0.1:0", bal)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -55,7 +58,8 @@ func TestStartStop(t *testing.T) {
 
 func TestStartAlreadyRunning(t *testing.T) {
 	pool := backend.NewPool()
-	server := New("127.0.0.1:0", pool)
+	bal := balancer.New(pool)
+	server := New("127.0.0.1:0", bal)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -74,7 +78,8 @@ func TestStartAlreadyRunning(t *testing.T) {
 
 func TestStopNotRunning(t *testing.T) {
 	pool := backend.NewPool()
-	server := New("127.0.0.1:0", pool)
+	bal := balancer.New(pool)
+	server := New("127.0.0.1:0", bal)
 
 	err := server.Stop()
 	if err == nil {
@@ -84,7 +89,8 @@ func TestStopNotRunning(t *testing.T) {
 
 func TestConnectionWithNoBackends(t *testing.T) {
 	pool := backend.NewPool()
-	server := New("127.0.0.1:0", pool)
+	bal := balancer.New(pool)
+	server := New("127.0.0.1:0", bal)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -113,7 +119,8 @@ func TestConnectionWithHealthyBackend(t *testing.T) {
 	b := backend.New(backendServer.Addr().String(), "Mock Backend")
 	pool.Add(b)
 
-	server := New("127.0.0.1:0", pool)
+	bal := balancer.New(pool)
+	server := New("127.0.0.1:0", bal)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -160,7 +167,8 @@ func TestGracefulShutdown(t *testing.T) {
 	b := backend.New(backendServer.Addr().String(), "Mock Backend")
 	pool.Add(b)
 
-	server := New("127.0.0.1:0", pool)
+	bal := balancer.New(pool)
+	server := New("127.0.0.1:0", bal)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
