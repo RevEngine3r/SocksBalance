@@ -68,6 +68,14 @@ balancer:
   # Set to 0 to disable sticky sessions
   # Recommended: 5m-30m for web browsing
   sticky_session_ttl: 10m
+  
+  # Maximum number of active backends to use concurrently (GFW EVASION!)
+  # Only the top N fastest backends will be used
+  # This prevents all backends from being detected/blocked at once
+  # Set to 0 to use all available backends
+  # Recommended: 3-5 for anti-detection
+  # Example: If you have 20 Tor circuits, only use the 3 fastest
+  max_active_backends: 3
 
 # Logging configuration
 log:

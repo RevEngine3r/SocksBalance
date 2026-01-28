@@ -15,7 +15,7 @@ import (
 	"github.com/RevEngine3r/SocksBalance/internal/proxy"
 )
 
-const version = "0.4.0"
+const version = "0.5.0"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to configuration file")
@@ -92,6 +92,11 @@ func main() {
 	} else {
 		fmt.Printf("  Sticky Sessions: disabled\n")
 	}
+	if cfg.Balancer.MaxActiveBackends > 0 {
+		fmt.Printf("  Max Active Backends: %d (only use top %d fastest backends)\n", cfg.Balancer.MaxActiveBackends, cfg.Balancer.MaxActiveBackends)
+	} else {
+		fmt.Printf("  Max Active Backends: unlimited (use all available backends)\n")
+	}
 	fmt.Printf("  Log Level: %s\n", cfg.Log.Level)
 
 	// Initialize backend pool with expanded backends
@@ -113,15 +118,18 @@ func main() {
 		fmt.Printf("[INFO] ... and %d more backends\n", len(expandedBackends)-5)
 	}
 
-	// Initialize load balancer with latency filtering and sticky sessions
+	// Initialize load balancer with latency filtering, sticky sessions, and max active backends
 	fmt.Println("[INFO] Initializing load balancer...")
-	bal := balancer.New(pool, cfg.Balancer.MaxLatency, cfg.Balancer.StickySessionTTL)
+	bal := balancer.New(pool, cfg.Balancer.MaxLatency, cfg.Balancer.StickySessionTTL, cfg.Balancer.MaxActiveBackends)
 	fmt.Printf("[INFO] Load balancer initialized with algorithm: %s\n", cfg.Balancer.Algorithm)
 	if cfg.Balancer.MaxLatency > 0 {
 		fmt.Printf("[INFO] Only backends with latency ≤ %v will be used\n", cfg.Balancer.MaxLatency)
 	}
 	if cfg.Balancer.StickySessionTTL > 0 {
 		fmt.Printf("[INFO] Sticky sessions enabled: clients stick to same backend for %v\n", cfg.Balancer.StickySessionTTL)
+	}
+	if cfg.Balancer.MaxActiveBackends > 0 {
+		fmt.Printf("[INFO] Anti-detection mode: Only top %d fastest backends will be used concurrently\n", cfg.Balancer.MaxActiveBackends)
 	}
 
 	// Start health checker
@@ -174,6 +182,9 @@ func main() {
 
 	fmt.Println("[INFO] Server started successfully")
 	fmt.Printf("[INFO] Managing %d backends with health monitoring\n", len(expandedBackends))
+	if cfg.Balancer.MaxActiveBackends > 0 {
+		fmt.Printf("[INFO] GFW Evasion: Rotating through top %d fastest backends only\n", cfg.Balancer.MaxActiveBackends)
+	}
 	fmt.Println("[INFO] Press Ctrl+C to stop...")
 
 	// Wait for shutdown signal
