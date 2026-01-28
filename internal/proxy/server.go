@@ -296,3 +296,10 @@ func (s *Server) IsRunning() bool {
 	defer s.mu.Unlock()
 	return s.running
 }
+
+// GetListener returns the underlying network listener (for testing)
+func (s *Server) GetListener() net.Listener {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listener
+}
