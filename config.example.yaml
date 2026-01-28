@@ -9,13 +9,28 @@ listen: "0.0.0.0:1080"
 mode: "transparent"
 
 # Backend SOCKS5 proxy servers
+# Supports single ports and port ranges
 backends:
+  # Single backend
   - address: "192.168.1.100:1080"
     name: "Primary Proxy"
-  - address: "192.168.1.101:1080"
-    name: "Secondary Proxy"
-  - address: "192.168.1.102:1080"
-    name: "Tertiary Proxy"
+
+  # Port range (expands to multiple backends)
+  # Format: host:startPort-endPort
+  # Example: 127.0.0.1:9070-9089 creates 20 backends (9070, 9071, ..., 9089)
+  - address: "127.0.0.1:9070-9089"
+    name: "Tor Instances"
+
+  # Another range example
+  - address: "192.168.1.200:10800-10810"
+    name: "Proxy Farm"
+
+  # IPv6 support (single and ranges)
+  - address: "[::1]:1080"
+    name: "IPv6 Local"
+  
+  - address: "[2001:db8::1]:8080-8082"
+    name: "IPv6 Range"
 
 # Health check configuration
 health:

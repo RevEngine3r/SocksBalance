@@ -15,7 +15,7 @@ import (
 	"github.com/RevEngine3r/SocksBalance/internal/proxy"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to configuration file")
@@ -47,18 +47,36 @@ func main() {
 		fmt.Printf("[INFO] Mode overridden: %s\n", cfg.Mode)
 	}
 
+	// Expand port ranges in backends
+	expandedBackends := cfg.ExpandBackends()
+
 	// Display configuration
 	fmt.Printf("[INFO] Configuration loaded successfully\n")
 	fmt.Printf("  Listen: %s\n", cfg.Listen)
 	fmt.Printf("  Mode: %s\n", cfg.Mode)
-	fmt.Printf("  Backends: %d\n", len(cfg.Backends))
+	fmt.Printf("  Backends (configured): %d\n", len(cfg.Backends))
+
+	// Show original backend configs with range expansion info
 	for i, b := range cfg.Backends {
-		if b.Name != "" {
-			fmt.Printf("    [%d] %s (%s)\n", i+1, b.Name, b.Address)
+		addrs, _ := config.ParseAddress(b.Address)
+		if len(addrs) > 1 {
+			// Port range
+			if b.Name != "" {
+				fmt.Printf("    [%d] %s (%s) → expands to %d backends\n", i+1, b.Name, b.Address, len(addrs))
+			} else {
+				fmt.Printf("    [%d] %s → expands to %d backends\n", i+1, b.Address, len(addrs))
+			}
 		} else {
-			fmt.Printf("    [%d] %s\n", i+1, b.Address)
+			// Single backend
+			if b.Name != "" {
+				fmt.Printf("    [%d] %s (%s)\n", i+1, b.Name, b.Address)
+			} else {
+				fmt.Printf("    [%d] %s\n", i+1, b.Address)
+			}
 		}
 	}
+
+	fmt.Printf("  Backends (total after expansion): %d\n", len(expandedBackends))
 	fmt.Printf("  Health Check Interval: %v\n", cfg.Health.CheckInterval)
 	if cfg.Health.TestURL != "" {
 		fmt.Printf("  Test URL: %s\n", cfg.Health.TestURL)
@@ -66,13 +84,23 @@ func main() {
 	fmt.Printf("  Load Balancer: %s\n", cfg.Balancer.Algorithm)
 	fmt.Printf("  Log Level: %s\n", cfg.Log.Level)
 
-	// Initialize backend pool
+	// Initialize backend pool with expanded backends
 	fmt.Println("\n[INFO] Initializing backend pool...")
 	pool := backend.NewPool()
-	for _, b := range cfg.Backends {
+	for i, b := range expandedBackends {
 		backend := backend.New(b.Address, b.Name)
 		pool.Add(backend)
-		fmt.Printf("[INFO] Added backend: %s\n", b.Address)
+		if i < 5 || cfg.Log.Level == "debug" {
+			// Show first 5 or all if debug
+			if b.Name != "" {
+				fmt.Printf("[INFO] Added backend: %s (%s)\n", b.Address, b.Name)
+			} else {
+				fmt.Printf("[INFO] Added backend: %s\n", b.Address)
+			}
+		}
+	}
+	if len(expandedBackends) > 5 && cfg.Log.Level != "debug" {
+		fmt.Printf("[INFO] ... and %d more backends\n", len(expandedBackends)-5)
 	}
 
 	// Initialize load balancer
@@ -129,6 +157,7 @@ func main() {
 	}
 
 	fmt.Println("[INFO] Server started successfully")
+	fmt.Printf("[INFO] Managing %d backends with health monitoring\n", len(expandedBackends))
 	fmt.Println("[INFO] Press Ctrl+C to stop...")
 
 	// Wait for shutdown signal
