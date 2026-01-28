@@ -23,14 +23,11 @@ func New(pool *backend.Pool) *Balancer {
 // Next selects the next backend using round-robin on latency-sorted backends
 // Returns nil if no healthy backends are available
 func (b *Balancer) Next() *backend.Backend {
-	// Get healthy backends sorted by latency
-	backends := b.pool.GetHealthy()
+	// Get healthy backends sorted by latency (lowest first)
+	backends := b.pool.SortByLatency()
 	if len(backends) == 0 {
 		return nil
 	}
-
-	// Sort by latency (lowest first)
-	b.pool.SortByLatency(backends)
 
 	// Round-robin selection
 	idx := atomic.AddUint32(&b.counter, 1)
