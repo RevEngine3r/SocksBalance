@@ -20,15 +20,24 @@
   - Updated `main.go` to load and display configuration
   - Tests: 11 test cases covering valid configs, defaults, and error cases
 
+- ✅ **STEP3: Backend Representation** (2026-01-28)
+  - Created `internal/backend/backend.go` with thread-safe Backend struct
+  - Implemented health status tracking (healthy/unhealthy, latency, failure count)
+  - Added thread-safe getters/setters with RWMutex
+  - Created `internal/backend/pool.go` for managing backend collection
+  - Implemented Pool methods: Add, Remove, GetHealthy, GetAll, SortByLatency, UpdateLatency
+  - Wrote comprehensive unit tests for Backend and Pool
+  - Tests: 18 test cases covering thread safety, filtering, and sorting
+
 ## Current Step
-**STEP3: Backend Representation** ([details](./ROAD_MAP/core-infrastructure/STEP3_backend_representation.md))
+**STEP4: TCP Proxy Server** ([details](./ROAD_MAP/core-infrastructure/STEP4_tcp_proxy_server.md))
 
 ### Plan
-1. Create `internal/backend/backend.go` with Backend struct
-2. Add health status tracking (healthy/unhealthy, latency)
-3. Implement connection test functionality
-4. Add thread-safe state management
-5. Write unit tests for backend operations
+1. Create `internal/proxy/server.go` with TCP listener
+2. Implement graceful shutdown with signal handling
+3. Accept incoming SOCKS5 client connections
+4. Pass connections to handler (placeholder for now)
+5. Write unit tests for server lifecycle
 
 ### Status
 ⏳ Ready to implement
@@ -36,7 +45,6 @@
 ---
 
 ## Next Steps
-- STEP3: Backend Representation
 - STEP4: TCP Proxy Server
 - STEP5: Connection Handler
 - STEP6: Health Checker
