@@ -39,15 +39,26 @@
   - Wrote comprehensive unit tests including mock backend server
   - Tests: 7 test cases covering server lifecycle, connections, and graceful shutdown
 
+- ✅ **STEP5: SOCKS5 Protocol Handler** (2026-01-28)
+  - Created `internal/proxy/socks5.go` with full SOCKS5 protocol implementation
+  - Implemented client handshake (version negotiation, NO_AUTH method)
+  - Added CONNECT command parsing with IPv4, IPv6, and domain support
+  - Implemented backend SOCKS5 handshake (client → backend proxy chain)
+  - Updated server to use SOCKS5 protocol for both client and backend connections
+  - Added proper SOCKS5 reply codes and error handling
+  - Wrote comprehensive unit tests with mock connections
+  - Tests: 7 test cases covering IPv4, domain, invalid versions, unsupported commands
+
 ## Current Step
-**STEP5: Connection Handler** ([details](./ROAD_MAP/core-infrastructure/STEP5_connection_handler.md))
+**STEP6: Health Checker** ([details](./ROAD_MAP/core-infrastructure/STEP6_health_checker.md))
 
 ### Plan
-1. Implement SOCKS5 protocol parsing
-2. Handle authentication (no-auth method for now)
-3. Parse CONNECT requests
-4. Route to backend via load balancer
-5. Write unit tests for SOCKS5 protocol handling
+1. Create `internal/health/checker.go` for periodic health checks
+2. Implement connection test to each backend
+3. Add URL latency measurement via backend proxy
+4. Update backend health status and latency
+5. Run checks on configurable interval
+6. Write unit tests for health checker
 
 ### Status
 ⏳ Ready to implement
@@ -55,7 +66,6 @@
 ---
 
 ## Next Steps
-- STEP5: Connection Handler (SOCKS5 Protocol)
 - STEP6: Health Checker
-- STEP7: Load Balancer
+- STEP7: Load Balancer (Round-Robin with Latency Sorting)
 - STEP8: Integration & Polish
