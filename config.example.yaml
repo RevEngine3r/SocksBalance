@@ -1,49 +1,49 @@
 # SocksBalance Configuration
 
-# TCP listen address for incoming SOCKS5 client connections
+# Listen address for incoming connections
 listen: "0.0.0.0:1080"
 
-# Backend SOCKS5 servers
+# Proxy mode:
+#   - transparent: Zero-copy TCP forwarding (fastest, recommended)
+#   - socks5: Full SOCKS5 protocol handling (decode/re-encode)
+mode: "transparent"
+
+# Backend SOCKS5 proxy servers
 backends:
-  - address: "proxy1.example.com:1080"
-    name: "Proxy 1"
-    
-  - address: "proxy2.example.com:1080"
-    name: "Proxy 2"
-    
-  - address: "127.0.0.1:9050"
-    name: "Local Tor"
+  - address: "192.168.1.100:1080"
+    name: "Primary Proxy"
+  - address: "192.168.1.101:1080"
+    name: "Secondary Proxy"
+  - address: "192.168.1.102:1080"
+    name: "Tertiary Proxy"
 
 # Health check configuration
 health:
-  # Initial connection test timeout
-  connect_timeout: 5s
-  
-  # URL to test for latency measurement (HTTP/HTTPS)
+  # URL to test through backends (HTTP/HTTPS)
   test_url: "https://www.google.com"
   
-  # Interval between latency tests
+  # How often to check backend health
   check_interval: 10s
   
-  # Request timeout for URL test
+  # Maximum time to wait for backend connection
+  connect_timeout: 5s
+  
+  # Maximum time to wait for full HTTP request
   request_timeout: 10s
   
-  # Mark backend as unhealthy after N consecutive failures
+  # Number of failures before marking backend unhealthy
   failure_threshold: 3
 
-# Load balancing configuration
+# Load balancer configuration
 balancer:
-  # Algorithm: roundrobin
+  # Algorithm: roundrobin (only option currently)
+  # Backends are automatically sorted by latency
   algorithm: "roundrobin"
-  
-  # Sort backends by latency before routing
-  sort_by_latency: true
-  
-  # Maximum latency difference (ms) to consider backends "equal"
-  # Backends within this range are treated as same tier
-  latency_tolerance: 50
 
-# Logging
+# Logging configuration
 log:
-  level: "info"  # debug, info, warn, error
-  format: "text"  # text, json
+  # Level: debug, info, warn, error
+  level: "info"
+  
+  # Format: text, json
+  format: "text"

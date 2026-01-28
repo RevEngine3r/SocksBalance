@@ -15,12 +15,13 @@ import (
 	"github.com/RevEngine3r/SocksBalance/internal/proxy"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to configuration file")
 	showVersion := flag.Bool("version", false, "Show version information")
 	listenAddr := flag.String("listen", "", "Override listen address (e.g., 0.0.0.0:1080)")
+	mode := flag.String("mode", "", "Proxy mode: transparent (default) or socks5")
 	flag.Parse()
 
 	if *showVersion {
@@ -36,13 +37,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Override with command-line flags
 	if *listenAddr != "" {
 		cfg.Listen = *listenAddr
 		fmt.Printf("[INFO] Listen address overridden: %s\n", cfg.Listen)
 	}
+	if *mode != "" {
+		cfg.Mode = *mode
+		fmt.Printf("[INFO] Mode overridden: %s\n", cfg.Mode)
+	}
 
+	// Display configuration
 	fmt.Printf("[INFO] Configuration loaded successfully\n")
 	fmt.Printf("  Listen: %s\n", cfg.Listen)
+	fmt.Printf("  Mode: %s\n", cfg.Mode)
 	fmt.Printf("  Backends: %d\n", len(cfg.Backends))
 	for i, b := range cfg.Backends {
 		if b.Name != "" {
@@ -58,6 +66,7 @@ func main() {
 	fmt.Printf("  Load Balancer: %s\n", cfg.Balancer.Algorithm)
 	fmt.Printf("  Log Level: %s\n", cfg.Log.Level)
 
+	// Initialize backend pool
 	fmt.Println("\n[INFO] Initializing backend pool...")
 	pool := backend.NewPool()
 	for _, b := range cfg.Backends {
@@ -66,10 +75,12 @@ func main() {
 		fmt.Printf("[INFO] Added backend: %s\n", b.Address)
 	}
 
+	// Initialize load balancer
 	fmt.Println("[INFO] Initializing load balancer...")
 	bal := balancer.New(pool)
 	fmt.Printf("[INFO] Load balancer initialized with algorithm: %s\n", cfg.Balancer.Algorithm)
 
+	// Start health checker
 	fmt.Println("[INFO] Starting health checker...")
 	healthChecker := health.New(
 		pool,
@@ -88,17 +99,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("[INFO] Starting SOCKS5 proxy server on %s...\n", cfg.Listen)
-	server := proxy.New(cfg.Listen, bal)
+	// Start proxy server based on mode
+	fmt.Printf("[INFO] Starting proxy server on %s...\n", cfg.Listen)
 
-	if err := server.Start(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "[ERROR] Failed to start server: %v\n", err)
+	var serverStopper interface{ Stop() error }
+
+	switch cfg.Mode {
+	case "transparent":
+		fmt.Println("[INFO] Mode: Transparent TCP forwarding (zero-copy, no SOCKS5 decoding)")
+		server := proxy.NewTransparent(cfg.Listen, bal)
+		if err := server.Start(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "[ERROR] Failed to start server: %v\n", err)
+			os.Exit(1)
+		}
+		serverStopper = server
+
+	case "socks5":
+		fmt.Println("[INFO] Mode: SOCKS5 protocol handling (decode/re-encode)")
+		server := proxy.New(cfg.Listen, bal)
+		if err := server.Start(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "[ERROR] Failed to start server: %v\n", err)
+			os.Exit(1)
+		}
+		serverStopper = server
+
+	default:
+		fmt.Fprintf(os.Stderr, "[ERROR] Invalid mode: %s (use 'transparent' or 'socks5')\n", cfg.Mode)
 		os.Exit(1)
 	}
 
 	fmt.Println("[INFO] Server started successfully")
 	fmt.Println("[INFO] Press Ctrl+C to stop...")
 
+	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
@@ -111,7 +144,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "[WARN] Failed to stop health checker: %v\n", err)
 	}
 
-	if err := server.Stop(); err != nil {
+	if err := serverStopper.Stop(); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] Failed to stop server gracefully: %v\n", err)
 		os.Exit(1)
 	}
