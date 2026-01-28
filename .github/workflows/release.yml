@@ -1,0 +1,182 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'release'
+      - 'release-*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          # Remove 'release-' prefix if exists, otherwise use tag as-is
+          VERSION="${TAG_NAME#release-}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Build multi-platform binaries
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Build matrix
+          PLATFORMS=(
+            "linux/amd64"
+            "linux/arm64"
+            "linux/arm"
+            "darwin/amd64"
+            "darwin/arm64"
+            "windows/amd64"
+          )
+          
+          mkdir -p releases
+          
+          for platform in "${PLATFORMS[@]}"; do
+            GOOS="${platform%/*}"
+            GOARCH="${platform#*/}"
+            
+            # Set ARM version for arm32
+            if [ "$GOARCH" = "arm" ]; then
+              export GOARM=7
+              ARCH_SUFFIX="armv7"
+            else
+              ARCH_SUFFIX="$GOARCH"
+            fi
+            
+            OUTPUT_NAME="socksbalance"
+            if [ "$GOOS" = "windows" ]; then
+              OUTPUT_NAME="${OUTPUT_NAME}.exe"
+            fi
+            
+            echo "Building for $GOOS/$GOARCH..."
+            
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+              -ldflags="-s -w -X main.version=$VERSION" \
+              -trimpath \
+              -o "releases/$OUTPUT_NAME" \
+              ./cmd/socksbalance
+            
+            # Create archive
+            ARCHIVE_NAME="socksbalance-${VERSION}-${GOOS}-${ARCH_SUFFIX}"
+            
+            if [ "$GOOS" = "windows" ]; then
+              # Create zip for Windows
+              cd releases
+              zip "${ARCHIVE_NAME}.zip" "$OUTPUT_NAME" ../config.example.yaml ../README.md ../LICENSE
+              cd ..
+              rm "releases/$OUTPUT_NAME"
+            else
+              # Create tar.gz for Unix
+              tar -czf "releases/${ARCHIVE_NAME}.tar.gz" \
+                -C releases "$OUTPUT_NAME" \
+                -C .. config.example.yaml README.md LICENSE
+              rm "releases/$OUTPUT_NAME"
+            fi
+            
+            echo "✓ Created ${ARCHIVE_NAME}"
+          done
+
+      - name: Generate checksums
+        run: |
+          cd releases
+          sha256sum * > checksums.txt
+          cat checksums.txt
+          cd ..
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          
+          cat > release_notes.md << 'EOF'
+          ## SocksBalance ${{ steps.version.outputs.version }}
+          
+          High-performance SOCKS5 load balancer with health checking and latency-based routing.
+          
+          ### Features
+          - Zero-copy TCP routing for maximum performance
+          - Intelligent health checks with latency measurement
+          - Round-robin load balancing with automatic failover
+          - YAML-based configuration
+          - Cross-platform support
+          
+          ### Installation
+          
+          1. Download the appropriate archive for your platform
+          2. Extract the archive
+          3. Copy `config.example.yaml` to `config.yaml` and edit as needed
+          4. Run `./socksbalance -config config.yaml`
+          
+          ### Platforms
+          
+          - **Linux**: amd64, arm64, armv7
+          - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+          - **Windows**: amd64
+          
+          ### Verification
+          
+          Verify downloads using `checksums.txt`:
+          
+          ```bash
+          sha256sum -c checksums.txt
+          ```
+          
+          ### Documentation
+          
+          See [README.md](https://github.com/RevEngine3r/SocksBalance#readme) for configuration and usage.
+          
+          ---
+          
+          **Build Info**
+          - Tag: `${{ steps.version.outputs.tag }}`
+          - Go Version: 1.22
+          - Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+
+      - name: Delete existing release (if exists)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release delete "$TAG" -y 2>/dev/null || true
+          echo "Cleaned up existing release for $TAG"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          
+          gh release create "$TAG" \
+            --title "SocksBalance v$VERSION" \
+            --notes-file release_notes.md \
+            releases/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: socksbalance-${{ steps.version.outputs.version }}
+          path: releases/*
+          retention-days: 90
