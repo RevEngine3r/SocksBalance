@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RevEngine3r/SocksBalance/internal/backend"
+	"github.com/RevEngine3r/SocksBalance/internal/balancer"
 )
 
 // Server represents the TCP proxy server
 type Server struct {
 	address  string
-	pool     *backend.Pool
+	balancer *balancer.Balancer
 	listener net.Listener
 	wg       sync.WaitGroup
 	mu       sync.Mutex
@@ -22,10 +22,10 @@ type Server struct {
 }
 
 // New creates a new proxy server
-func New(address string, pool *backend.Pool) *Server {
+func New(address string, bal *balancer.Balancer) *Server {
 	return &Server{
-		address: address,
-		pool:    pool,
+		address:  address,
+		balancer: bal,
 	}
 }
 
@@ -98,15 +98,14 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 
 	log.Printf("[INFO] SOCKS5 target for %s: %s", clientAddr, target)
 
-	// Get healthy backend
-	backends := s.pool.GetHealthy()
-	if len(backends) == 0 {
+	// Get backend from load balancer
+	backend := s.balancer.Next()
+	if backend == nil {
 		log.Printf("[ERROR] No healthy backends available for %s", clientAddr)
 		sendReply(clientConn, replyHostUnreachable)
 		return
 	}
 
-	backend := backends[0]
 	log.Printf("[INFO] Routing %s through backend %s to %s", clientAddr, backend.Address(), target)
 
 	// Connect to backend SOCKS5 server

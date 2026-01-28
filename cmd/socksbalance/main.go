@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/RevEngine3r/SocksBalance/internal/backend"
+	"github.com/RevEngine3r/SocksBalance/internal/balancer"
 	"github.com/RevEngine3r/SocksBalance/internal/config"
 	"github.com/RevEngine3r/SocksBalance/internal/health"
 	"github.com/RevEngine3r/SocksBalance/internal/proxy"
@@ -65,6 +66,10 @@ func main() {
 		fmt.Printf("[INFO] Added backend: %s\n", b.Address)
 	}
 
+	fmt.Println("[INFO] Initializing load balancer...")
+	bal := balancer.New(pool)
+	fmt.Printf("[INFO] Load balancer initialized with algorithm: %s\n", cfg.Balancer.Algorithm)
+
 	fmt.Println("[INFO] Starting health checker...")
 	healthChecker := health.New(
 		pool,
@@ -84,7 +89,7 @@ func main() {
 	}
 
 	fmt.Printf("[INFO] Starting SOCKS5 proxy server on %s...\n", cfg.Listen)
-	server := proxy.New(cfg.Listen, pool)
+	server := proxy.New(cfg.Listen, bal)
 
 	if err := server.Start(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] Failed to start server: %v\n", err)
