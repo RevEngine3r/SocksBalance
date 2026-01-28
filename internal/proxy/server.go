@@ -98,15 +98,15 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 
 	log.Printf("[INFO] SOCKS5 target for %s: %s", clientAddr, target)
 
-	// Get backend from load balancer
-	backend := s.balancer.Next()
+	// Get backend from load balancer (with sticky session support)
+	backend := s.balancer.Next(clientAddr)
 	if backend == nil {
 		log.Printf("[ERROR] No healthy backends available for %s", clientAddr)
 		sendReply(clientConn, replyHostUnreachable)
 		return
 	}
 
-	log.Printf("[INFO] Routing %s through backend %s to %s", clientAddr, backend.Address(), target)
+	log.Printf("[INFO] Routing %s through backend %s (latency: %v) to %s", clientAddr, backend.Address(), backend.Latency(), target)
 
 	// Connect to backend SOCKS5 server
 	backendConn, err := net.DialTimeout("tcp", backend.Address(), 5*time.Second)

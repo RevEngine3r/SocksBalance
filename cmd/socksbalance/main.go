@@ -15,7 +15,7 @@ import (
 	"github.com/RevEngine3r/SocksBalance/internal/proxy"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to configuration file")
@@ -82,6 +82,16 @@ func main() {
 		fmt.Printf("  Test URL: %s\n", cfg.Health.TestURL)
 	}
 	fmt.Printf("  Load Balancer: %s\n", cfg.Balancer.Algorithm)
+	if cfg.Balancer.MaxLatency > 0 {
+		fmt.Printf("  Max Latency Filter: %v (only use backends faster than this)\n", cfg.Balancer.MaxLatency)
+	} else {
+		fmt.Printf("  Max Latency Filter: disabled (use all healthy backends)\n")
+	}
+	if cfg.Balancer.StickySessionTTL > 0 {
+		fmt.Printf("  Sticky Sessions: %v (same client → same backend)\n", cfg.Balancer.StickySessionTTL)
+	} else {
+		fmt.Printf("  Sticky Sessions: disabled\n")
+	}
 	fmt.Printf("  Log Level: %s\n", cfg.Log.Level)
 
 	// Initialize backend pool with expanded backends
@@ -103,10 +113,16 @@ func main() {
 		fmt.Printf("[INFO] ... and %d more backends\n", len(expandedBackends)-5)
 	}
 
-	// Initialize load balancer
+	// Initialize load balancer with latency filtering and sticky sessions
 	fmt.Println("[INFO] Initializing load balancer...")
-	bal := balancer.New(pool)
+	bal := balancer.New(pool, cfg.Balancer.MaxLatency, cfg.Balancer.StickySessionTTL)
 	fmt.Printf("[INFO] Load balancer initialized with algorithm: %s\n", cfg.Balancer.Algorithm)
+	if cfg.Balancer.MaxLatency > 0 {
+		fmt.Printf("[INFO] Only backends with latency ≤ %v will be used\n", cfg.Balancer.MaxLatency)
+	}
+	if cfg.Balancer.StickySessionTTL > 0 {
+		fmt.Printf("[INFO] Sticky sessions enabled: clients stick to same backend for %v\n", cfg.Balancer.StickySessionTTL)
+	}
 
 	// Start health checker
 	fmt.Println("[INFO] Starting health checker...")

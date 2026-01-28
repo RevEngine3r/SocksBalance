@@ -92,14 +92,14 @@ func (s *TransparentServer) handleConnection(ctx context.Context, clientConn net
 	clientAddr := clientConn.RemoteAddr().String()
 	log.Printf("[INFO] New connection from %s", clientAddr)
 
-	// Select backend via load balancer
-	backend := s.balancer.Next()
+	// Select backend via load balancer (with sticky session support)
+	backend := s.balancer.Next(clientAddr)
 	if backend == nil {
 		log.Printf("[ERROR] No healthy backends available for %s", clientAddr)
 		return
 	}
 
-	log.Printf("[INFO] Forwarding %s → backend %s", clientAddr, backend.Address())
+	log.Printf("[INFO] Forwarding %s → backend %s (latency: %v)", clientAddr, backend.Address(), backend.Latency())
 
 	// Connect to backend
 	backendConn, err := net.DialTimeout("tcp", backend.Address(), 5*time.Second)
@@ -127,14 +127,18 @@ func (s *TransparentServer) pipe(ctx context.Context, client, backend net.Conn) 
 	go func() {
 		defer wg.Done()
 		io.Copy(backend, client)
-		backend.(*net.TCPConn).CloseWrite() // Half-close
+		if tcpConn, ok := backend.(*net.TCPConn); ok {
+			tcpConn.CloseWrite() // Half-close
+		}
 	}()
 
 	// Backend → Client
 	go func() {
 		defer wg.Done()
 		io.Copy(client, backend)
-		client.(*net.TCPConn).CloseWrite() // Half-close
+		if tcpConn, ok := client.(*net.TCPConn); ok {
+			tcpConn.CloseWrite() // Half-close
+		}
 	}()
 
 	// Wait for both directions or context cancellation
