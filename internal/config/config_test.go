@@ -182,7 +182,7 @@ health:
 }
 
 func TestLoadNegativeTimeout(t *testing.T) {
-	yests := []struct {
+	tests := []struct {
 		name string
 		yaml string
 	}{
