@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"sort"
 	"time"
-
-	"github.com/RevEngine3r/SocksBalance/internal/backend"
 )
 
 // BackendStats represents statistics for a single backend
