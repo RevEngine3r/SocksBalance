@@ -43,8 +43,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Register routes
 	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/api/stats", s.handleStatsReal) // Use real implementation
-	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/api/stats", s.handleStatsReal)
+	mux.HandleFunc("/", s.handleDashboard) // Use real dashboard
 
 	s.httpSrv = &http.Server{
 		Addr:         s.addr,
@@ -103,23 +103,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleIndex serves the dashboard UI (placeholder for STEP3)
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+// handleDashboard serves the main dashboard UI
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-
-	// Placeholder HTML - will be replaced in STEP3
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html>
-<head>
-	<title>SocksBalance Dashboard</title>
-	<meta charset="UTF-8">
-</head>
-<body>
-	<h1>SocksBalance Dashboard</h1>
-	<p>Dashboard UI will be implemented in STEP3</p>
-	<p><a href="/api/stats">View Stats API</a></p>
-	<p><a href="/health">View Health Check</a></p>
-</body>
-</html>`)
+	fmt.Fprint(w, dashboardHTML)
 }
