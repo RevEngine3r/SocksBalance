@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/RevEngine3r/SocksBalance/internal/config"
 )
 
 const version = "0.1.0"
@@ -20,13 +22,33 @@ func main() {
 	}
 
 	fmt.Printf("SocksBalance v%s\n", version)
-	fmt.Printf("Config: %s\n", *configPath)
-	if *listenAddr != "" {
-		fmt.Printf("Listen: %s (override)\n", *listenAddr)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] Failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
 
+	if *listenAddr != "" {
+		cfg.Listen = *listenAddr
+		fmt.Printf("[INFO] Listen address overridden: %s\n", cfg.Listen)
+	}
+
+	fmt.Printf("[INFO] Configuration loaded successfully\n")
+	fmt.Printf("  Listen: %s\n", cfg.Listen)
+	fmt.Printf("  Backends: %d\n", len(cfg.Backends))
+	for i, b := range cfg.Backends {
+		if b.Name != "" {
+			fmt.Printf("    [%d] %s (%s)\n", i+1, b.Name, b.Address)
+		} else {
+			fmt.Printf("    [%d] %s\n", i+1, b.Address)
+		}
+	}
+	fmt.Printf("  Health Check Interval: %v\n", cfg.Health.CheckInterval)
+	fmt.Printf("  Load Balancer: %s\n", cfg.Balancer.Algorithm)
+	fmt.Printf("  Log Level: %s\n", cfg.Log.Level)
+
 	fmt.Println("\n[INFO] Starting initialization...")
-	fmt.Println("[TODO] Load configuration")
 	fmt.Println("[TODO] Initialize backend pool")
 	fmt.Println("[TODO] Start health checker")
 	fmt.Println("[TODO] Start TCP proxy server")
