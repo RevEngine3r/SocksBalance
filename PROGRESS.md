@@ -1,5 +1,28 @@
 # SocksBalance Progress Tracker
 
+## Active Feature: Web UI Dashboard
+
+### Current Step: STEP1 - HTTP Server Foundation
+**Status**: 🔄 In Progress  
+**Started**: 2026-01-28
+
+#### Plan
+Create lightweight HTTP server foundation:
+- Create `internal/web/server.go` with Server struct
+- Implement Start/Stop lifecycle methods
+- Add basic routes (/, /api/stats, /health)
+- Write comprehensive unit tests
+- Verify graceful shutdown works correctly
+
+#### Next Steps
+1. ✅ Create feature roadmap
+2. ⏳ Implement HTTP server struct
+3. ⏳ Add route handlers skeleton
+4. ⏳ Write unit tests
+5. ⏳ Test graceful shutdown
+
+---
+
 ## Latest Feature: GFW Evasion (Max Active Backends)
 
 ### Version 0.5.0 (2026-01-28)
@@ -95,7 +118,8 @@ Time 0:20 - Backend#3 now faster (80ms), using: Backend#1, Backend#3, Backend#8
 - **v0.2.0** - Transparent mode (zero-copy)
 - **v0.3.0** - Port range expansion
 - **v0.4.0** - Latency filtering + Sticky sessions
-- **v0.5.0** - **GFW evasion (max active backends)**
+- **v0.5.0** - GFW evasion (max active backends)
+- **v0.6.0** - Web UI Dashboard (IN PROGRESS)
 
 ### Anti-GFW Stack
 
@@ -158,7 +182,7 @@ balancer:
 - ✅ **STEP9**: Transparent Mode (Zero-Copy)
 - ✅ **STEP10**: Port Range Expansion
 - ✅ **STEP11**: Latency Filtering + Sticky Sessions
-- ✅ **STEP12**: GFW Evasion (Max Active Backends) (NEW)
+- ✅ **STEP12**: GFW Evasion (Max Active Backends)
 
 ## Project Metrics
 
@@ -172,13 +196,10 @@ balancer:
 
 ## Status Summary
 
-🎉 **SocksBalance v0.5.0 - Production Ready with GFW Evasion!**
+🚀 **SocksBalance v0.6.0 (In Progress) - Adding Web UI Dashboard!**
 
-**Perfect for**:
-- 🛡️ **GFW Circumvention**: Limit backend exposure to avoid mass blocking
-- ⚡ **Tor Optimization**: Use only fastest circuits from large pool
-- 🔄 **Automatic Failover**: Failed backends replaced in real-time
-- 🌐 **Large Proxy Farms**: Efficiently manage 100+ backends
-- 🎯 **Twitter/Social Media**: Stable multi-request connections
-
-**Deploy with confidence!**
+**Current Focus**:
+- 🎨 **Web Dashboard**: Real-time monitoring interface
+- 📊 **Backend Status**: Visual health and latency display
+- ⚡ **AJAX Updates**: Auto-refreshing statistics
+- 📱 **Responsive Design**: Modern, mobile-friendly UI
