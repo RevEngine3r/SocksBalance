@@ -9,8 +9,8 @@
 Developing automated cross-compilation scripts to generate binaries for all supported OS/Arch combinations (Intel/ARM, 32/64-bit).
 
 ### Plan
-- [ ] **STEP 1: Cross-Compilation Scripts** (Current)
-- [ ] **STEP 2: Build Documentation**
+- [x] **STEP 1: Cross-Compilation Scripts** (Completed)
+- [ ] **STEP 2: Build Documentation** (Current)
 
 ---
 
