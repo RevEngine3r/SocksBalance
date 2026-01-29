@@ -48,6 +48,26 @@ health:
   
   # Number of failures before marking backend unhealthy
   failure_threshold: 3
+  
+  # --- CIRCUIT BREAKER (AUTOMATIC FAILOVER) ---
+  # Use real connection outcomes for health monitoring
+  # Backends handling traffic are monitored passively
+  # Failed backends are probed periodically for recovery
+  passive_monitoring: true
+  
+  # Circuit breaker: consecutive failures before removing backend from rotation
+  # When a backend fails this many times in a row, it's automatically removed
+  # and the load balancer switches to another healthy backend
+  circuit_threshold: 3
+  
+  # Time between recovery probes for failed backends
+  # Failed backends are tested at this interval to check if they've recovered
+  # Exponential backoff: 10s → 20s → 40s → 60s (max)
+  recovery_interval: 30s
+  
+  # Sliding window size for connection success rate tracking
+  # Tracks the last N connection attempts to calculate success rate
+  metrics_window_size: 10
 
 # Load balancer configuration
 balancer:
@@ -77,7 +97,7 @@ balancer:
   # Example: If you have 20 Tor circuits, only use the 3 fastest
   max_active_backends: 3
 
-# Web dashboard configuration (NEW!)
+# Web dashboard configuration
 web:
   # Enable web monitoring dashboard
   enabled: true
