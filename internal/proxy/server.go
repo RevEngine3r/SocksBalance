@@ -98,40 +98,111 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 
 	log.Printf("[INFO] SOCKS5 target for %s: %s", clientAddr, target)
 
-	// Get backend from load balancer (with sticky session support)
-	backend := s.balancer.Next(clientAddr)
-	if backend == nil {
-		log.Printf("[ERROR] No healthy backends available for %s", clientAddr)
-		sendReply(clientConn, replyHostUnreachable)
+	// Try to connect with automatic failover
+	const maxRetries = 3
+	var backend interface{}
+	var backendConn net.Conn
+	var connectErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Get backend from load balancer (with sticky session support)
+		backend = s.balancer.Next(clientAddr)
+		if backend == nil {
+			log.Printf("[ERROR] No healthy backends available for %s (attempt %d/%d)", clientAddr, attempt+1, maxRetries)
+			if attempt == maxRetries-1 {
+				sendReply(clientConn, replyHostUnreachable)
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		// Type assertion to get backend methods
+		type BackendInterface interface {
+			Address() string
+			Latency() time.Duration
+			RecordConnectionSuccess(time.Duration)
+			RecordConnectionFailure(bool)
+			MarkFailure(int)
+		}
+
+		be, ok := backend.(BackendInterface)
+		if !ok {
+			log.Printf("[ERROR] Backend does not implement required interface")
+			return
+		}
+
+		log.Printf("[INFO] Routing %s through backend %s (latency: %v) to %s (attempt %d/%d)",
+			clientAddr, be.Address(), be.Latency(), target, attempt+1, maxRetries)
+
+		// Connect to backend SOCKS5 server with timeout
+		connectStart := time.Now()
+		backendConn, connectErr = net.DialTimeout("tcp", be.Address(), 5*time.Second)
+		connectDuration := time.Since(connectStart)
+
+		if connectErr != nil {
+			// Check if it's a timeout
+			isTimeout := false
+			if netErr, ok := connectErr.(net.Error); ok && netErr.Timeout() {
+				isTimeout = true
+				log.Printf("[ERROR] Timeout connecting to backend %s: %v", be.Address(), connectErr)
+			} else {
+				log.Printf("[ERROR] Failed to connect to backend %s: %v", be.Address(), connectErr)
+			}
+
+			// Record failure and trigger circuit breaker
+			be.RecordConnectionFailure(isTimeout)
+			be.MarkFailure(3)
+
+			log.Printf("[WARN] Backend %s failed, trying another backend...", be.Address())
+
+			// Try next backend
+			if attempt < maxRetries-1 {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+
+			// All retries exhausted
+			log.Printf("[ERROR] All backends failed for %s after %d attempts", clientAddr, maxRetries)
+			sendReply(clientConn, replyHostUnreachable)
+			return
+		}
+
+		log.Printf("[INFO] Connected to backend %s in %v", be.Address(), connectDuration)
+
+		// Perform SOCKS5 handshake with backend
+		handshakeStart := time.Now()
+		if err := performBackendHandshake(backendConn, target); err != nil {
+			log.Printf("[ERROR] Backend SOCKS5 handshake failed: %v", err)
+			backendConn.Close()
+			be.RecordConnectionFailure(false)
+			be.MarkFailure(3)
+
+			log.Printf("[WARN] Backend %s handshake failed, trying another backend...", be.Address())
+
+			if attempt < maxRetries-1 {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+
+			log.Printf("[ERROR] All backends failed handshake for %s", clientAddr)
+			sendReply(clientConn, replyHostUnreachable)
+			return
+		}
+
+		handshakeDuration := time.Since(handshakeStart)
+		log.Printf("[INFO] Backend handshake successful in %v, relaying data for %s", handshakeDuration, clientAddr)
+
+		// Connection successful - record success
+		totalSetupTime := connectDuration + handshakeDuration
+		be.RecordConnectionSuccess(totalSetupTime)
+
+		// Relay data between client and backend
+		s.relay(ctx, clientConn, backendConn, be)
+
+		log.Printf("[INFO] Connection closed for %s", clientAddr)
 		return
 	}
-
-	log.Printf("[INFO] Routing %s through backend %s (latency: %v) to %s", clientAddr, backend.Address(), backend.Latency(), target)
-
-	// Connect to backend SOCKS5 server
-	backendConn, err := net.DialTimeout("tcp", backend.Address(), 5*time.Second)
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to backend %s: %v", backend.Address(), err)
-		backend.MarkFailure(3)
-		return
-	}
-	defer backendConn.Close()
-
-	log.Printf("[INFO] Connected to backend %s", backend.Address())
-
-	// Perform SOCKS5 handshake with backend
-	if err := performBackendHandshake(backendConn, target); err != nil {
-		log.Printf("[ERROR] Backend SOCKS5 handshake failed: %v", err)
-		backend.MarkFailure(3)
-		return
-	}
-
-	log.Printf("[INFO] Backend handshake successful, relaying data for %s", clientAddr)
-
-	// Relay data between client and backend
-	s.relay(ctx, clientConn, backendConn)
-
-	log.Printf("[INFO] Connection closed for %s", clientAddr)
 }
 
 // performBackendHandshake performs SOCKS5 handshake with backend server
@@ -216,18 +287,35 @@ func performBackendHandshake(conn net.Conn, target string) error {
 }
 
 // relay bidirectionally forwards data between client and backend
-func (s *Server) relay(ctx context.Context, client, backend net.Conn) {
+func (s *Server) relay(ctx context.Context, client, backend net.Conn, be interface{}) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
+	var relayErr error
+	var relayMu sync.Mutex
+
 	go func() {
 		defer wg.Done()
-		s.copyData(client, backend, "client->backend")
+		err := s.copyData(client, backend, "client->backend")
+		if err != nil {
+			relayMu.Lock()
+			if relayErr == nil {
+				relayErr = err
+			}
+			relayMu.Unlock()
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		s.copyData(backend, client, "backend->client")
+		err := s.copyData(backend, client, "backend->client")
+		if err != nil {
+			relayMu.Lock()
+			if relayErr == nil {
+				relayErr = err
+			}
+			relayMu.Unlock()
+		}
 	}()
 
 	done := make(chan struct{})
@@ -238,23 +326,32 @@ func (s *Server) relay(ctx context.Context, client, backend net.Conn) {
 
 	select {
 	case <-done:
+		// Check if relay failed due to backend issues
+		if relayErr != nil {
+			// Record failure if error occurred during data transfer
+			if beTyped, ok := be.(interface {
+				RecordConnectionFailure(bool)
+			}); ok {
+				beTyped.RecordConnectionFailure(false)
+			}
+		}
 	case <-ctx.Done():
 	}
 }
 
-// copyData copies data from src to dst
-func (s *Server) copyData(dst, src net.Conn, direction string) {
+// copyData copies data from src to dst and returns any error
+func (s *Server) copyData(dst, src net.Conn, direction string) error {
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
 			_, writeErr := dst.Write(buf[:n])
 			if writeErr != nil {
-				return
+				return writeErr
 			}
 		}
 		if err != nil {
-			return
+			return err
 		}
 	}
 }
