@@ -29,11 +29,15 @@ type BackendConfig struct {
 
 // HealthConfig represents health check settings
 type HealthConfig struct {
-	TestURL          string        `yaml:"test_url"`
-	CheckInterval    time.Duration `yaml:"check_interval"`
-	ConnectTimeout   time.Duration `yaml:"connect_timeout"`
-	RequestTimeout   time.Duration `yaml:"request_timeout"`
-	FailureThreshold int           `yaml:"failure_threshold"`
+	TestURL            string        `yaml:"test_url"`
+	CheckInterval      time.Duration `yaml:"check_interval"`
+	ConnectTimeout     time.Duration `yaml:"connect_timeout"`
+	RequestTimeout     time.Duration `yaml:"request_timeout"`
+	FailureThreshold   int           `yaml:"failure_threshold"`
+	PassiveMonitoring  bool          `yaml:"passive_monitoring"`   // Use connection outcomes instead of URL tests
+	CircuitThreshold   int           `yaml:"circuit_threshold"`    // Failures before circuit opens
+	RecoveryInterval   time.Duration `yaml:"recovery_interval"`    // Time between recovery probes
+	MetricsWindowSize  int           `yaml:"metrics_window_size"`  // Sliding window size for success rate
 }
 
 // BalancerConfig represents load balancer settings
@@ -103,6 +107,15 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("max_active_backends cannot be negative")
 	}
 
+	// Circuit breaker validation
+	if c.Health.CircuitThreshold < 0 {
+		return fmt.Errorf("circuit_threshold cannot be negative")
+	}
+
+	if c.Health.MetricsWindowSize < 0 {
+		return fmt.Errorf("metrics_window_size cannot be negative")
+	}
+
 	// Web config validation
 	if c.Web.RefreshInterval < 0 {
 		return fmt.Errorf("web refresh_interval cannot be negative")
@@ -133,6 +146,18 @@ func (c *Config) SetDefaults() {
 	}
 	if c.Health.TestURL == "" {
 		c.Health.TestURL = "https://www.google.com"
+	}
+
+	// Circuit breaker defaults
+	// Passive monitoring is enabled by default
+	if c.Health.CircuitThreshold == 0 {
+		c.Health.CircuitThreshold = 3 // 3 consecutive failures
+	}
+	if c.Health.RecoveryInterval == 0 {
+		c.Health.RecoveryInterval = 30 * time.Second // 30s between recovery probes
+	}
+	if c.Health.MetricsWindowSize == 0 {
+		c.Health.MetricsWindowSize = 10 // Track last 10 connections
 	}
 
 	// Balancer defaults
