@@ -1,0 +1,56 @@
+[Unit]
+Description=SocksBalance - High-Performance SOCKS5 Load Balancer
+Documentation=https://github.com/RevEngine3r/SocksBalance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Service type
+Type=simple
+
+# User and group (change to your preferred user)
+# For security, run as non-root user
+User=socksbalance
+Group=socksbalance
+
+# Working directory
+WorkingDirectory=/opt/socksbalance
+
+# Binary location and config path
+ExecStart=/opt/socksbalance/socksbalance -config /etc/socksbalance/config.yaml
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+# Security hardening
+# Prevent privilege escalation
+NoNewPrivileges=true
+
+# Private /tmp
+PrivateTmp=true
+
+# Restrict system calls (comment out if issues occur)
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Read-only root filesystem (comment out if you need write access)
+# ReadOnlyPaths=/
+# ReadWritePaths=/var/log/socksbalance
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=socksbalance
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=multi-user.target
