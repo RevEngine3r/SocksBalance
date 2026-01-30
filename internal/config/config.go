@@ -30,7 +30,8 @@ type BackendConfig struct {
 // HealthConfig represents health check settings
 type HealthConfig struct {
 	TestURL            string        `yaml:"test_url"`
-	CheckInterval      time.Duration `yaml:"check_interval"`
+	CheckInterval      time.Duration `yaml:"check_interval"`       // Interval for active backends
+	IdleCheckInterval  time.Duration `yaml:"idle_check_interval"`  // Faster interval for idle backends
 	ConnectTimeout     time.Duration `yaml:"connect_timeout"`
 	RequestTimeout     time.Duration `yaml:"request_timeout"`
 	FailureThreshold   int           `yaml:"failure_threshold"`
@@ -116,6 +117,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("metrics_window_size cannot be negative")
 	}
 
+	// Idle check interval validation
+	if c.Health.IdleCheckInterval < 0 {
+		return fmt.Errorf("idle_check_interval cannot be negative")
+	}
+
 	// Web config validation
 	if c.Web.RefreshInterval < 0 {
 		return fmt.Errorf("web refresh_interval cannot be negative")
@@ -134,6 +140,9 @@ func (c *Config) SetDefaults() {
 	// Health check defaults
 	if c.Health.CheckInterval == 0 {
 		c.Health.CheckInterval = 10 * time.Second
+	}
+	if c.Health.IdleCheckInterval == 0 {
+		c.Health.IdleCheckInterval = 1 * time.Second // Fast checks for idle backends
 	}
 	if c.Health.ConnectTimeout == 0 {
 		c.Health.ConnectTimeout = 5 * time.Second
